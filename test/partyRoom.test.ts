@@ -111,6 +111,26 @@ describe('party room', () => {
         assert.deepEqual(custom.playlist, ['stop-the-clock', 'log-dodge']);
     });
 
+    it('lets the owner clear the pool, and blocks start until a game is picked again', async () => {
+        const { room, host } = await createParty();
+        const guest = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Bo' });
+        await guest.request(ClientRequest.SetReady, { ready: true });
+
+        const cleared = (await host.request(ClientRequest.SetMode, {
+            mode: 'custom',
+            gameIds: []
+        })) as unknown as SetModeReply;
+        assert.deepEqual(cleared.playlist, []);
+        await host.waitForNextPatch();
+        assert.equal(host.state.lobby.blockedReason, 'invalid_playlist');
+        assert.equal(host.state.lobby.canStart, false);
+        await assert.rejects(host.request(ClientRequest.StartCompetition), refusedWith('invalid_playlist'));
+
+        await host.request(ClientRequest.SetMode, { mode: 'custom', gameIds: ['stop-the-clock'] });
+        await host.waitForNextPatch();
+        assert.equal(host.state.lobby.canStart, true);
+    });
+
     it('moves ownership to the longest-connected player when the owner drops', async () => {
         const { room, host } = await createParty();
         const second = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Second' });

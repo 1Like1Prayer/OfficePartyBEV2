@@ -41,7 +41,11 @@ export class Lobby {
         const refused = this.requireOwnerInLobby(playerId);
         if (refused) return refused;
 
-        if (mode === 'custom') {
+        if (mode === 'custom' && gameIds.length === 0) {
+            // The owner may clear the pool while picking; start stays blocked
+            // (`invalid_playlist`) until at least one game is back in.
+            this.customPlaylist = [];
+        } else if (mode === 'custom') {
             const built = buildCustomPlaylist(gameIds);
             if (!built.ok) return refuse('invalid_playlist', built.message);
             this.customPlaylist = built.playlist;
@@ -100,12 +104,14 @@ export class Lobby {
     }
 
     private blockedReason(): StartBlockedReason | null {
+        // An empty pool comes first: it is the owner's own fix to make, so it
+        // is the reason they see until at least one game is picked.
+        const custom = this.ctx.state.lobby.mode === 'custom';
+        if ((custom ? this.customPlaylist : playableGameIds()).length === 0) return 'invalid_playlist';
         const active = this.members.active();
         if (active.length < ROOM.MIN_PLAYERS) return 'not_enough_players';
         // A player holding a disconnected slot does not block the room.
         if (active.some((player) => !player.ready)) return 'players_not_ready';
-        const custom = this.ctx.state.lobby.mode === 'custom';
-        if ((custom ? this.customPlaylist : playableGameIds()).length === 0) return 'invalid_playlist';
         return null;
     }
 
