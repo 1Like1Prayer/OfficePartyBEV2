@@ -12,10 +12,11 @@
  * (`allowReconnection`), request/reply, validation and message rate limits.
  */
 
-import { matchMaker, Room, ServerError, type AuthContext, type Client } from 'colyseus';
+import { matchMaker, Room, ServerError, type AuthContext, type Client, type Deferred } from 'colyseus';
 import { PROTOCOL_VERSION, ROOM } from '../../../shared/constants.js';
-import { PROTOCOL_MISMATCH_CODE, type JoinOptions } from '../../../shared/protocol.js';
+import { KICKED_CODE, PROTOCOL_MISMATCH_CODE, type JoinOptions } from '../../../shared/protocol.js';
 import { uniqueRoomCode } from '../../platform/identity.js';
+import type { Outcome } from '../../platform/outcome.js';
 import { createRoomScheduler, createRoomTimeline, type Scheduler } from '../../platform/scheduler.js';
 import { Lobby } from './lobby.js';
 import { MatchFlow } from './matchFlow.js';
@@ -48,6 +49,11 @@ export class PartyRoom extends Room<{ state: PartyState }> {
     readonly members = new Members(this.context);
     readonly lobby = new Lobby(this.context, this.members);
     readonly match = new MatchFlow(this.context, this.members, this.lobby);
+
+    /** Dropped players' held slots, so a kick can cancel the wait. */
+    private readonly pendingReconnections = new Map<string, Deferred<Client>>();
+    /** Kicked players whose socket is still closing: their drop is a leave. */
+    private readonly kicked = new Set<string>();
 
     override async onCreate(): Promise<void> {
         // The short code doubles as the Colyseus roomId, so `joinById(code)` just works.
@@ -82,12 +88,19 @@ export class PartyRoom extends Room<{ state: PartyState }> {
 
     /** The socket dropped: hold the slot, and stop the round waiting on them right away. */
     override onDrop(client: Client): void {
+        // A kick closes the socket with a non-consented code; Colyseus calls
+        // onLeave right after an onDrop that holds no slot.
+        if (this.kicked.has(client.sessionId)) return;
         this.members.markDisconnected(client.sessionId);
         this.match.onPlayerGone(client.sessionId);
         this.lobby.refresh();
         // It rejects when the grace runs out or the room disposes first; Colyseus
         // then calls onLeave, which is where that case is handled.
-        this.allowReconnection(client, ROOM.DISCONNECT_GRACE_SECONDS).catch(() => undefined);
+        const reconnection = this.allowReconnection(client, ROOM.DISCONNECT_GRACE_SECONDS);
+        this.pendingReconnections.set(client.sessionId, reconnection);
+        reconnection
+            .catch(() => undefined)
+            .finally(() => this.pendingReconnections.delete(client.sessionId));
     }
 
     override onReconnect(client: Client): void {
@@ -98,9 +111,28 @@ export class PartyRoom extends Room<{ state: PartyState }> {
 
     /** An explicit leave, or the grace period ran out. */
     override onLeave(client: Client): void {
+        this.kicked.delete(client.sessionId);
         this.members.remove(client.sessionId);
         this.match.onPlayerGone(client.sessionId);
         this.lobby.refresh();
+    }
+
+    /**
+     * Owner removes a player. A connected player is disconnected with
+     * KICKED_CODE; a dropped one loses their held slot. Either way onLeave
+     * does the bookkeeping, exactly as for a player who left.
+     */
+    kickPlayer(ownerId: string, targetId: string): Outcome {
+        const allowed = this.members.checkKick(ownerId, targetId);
+        if (!allowed.ok) return allowed;
+        this.kicked.add(targetId);
+        const client = this.clients.getById(targetId);
+        if (client) {
+            client.leave(KICKED_CODE, 'Removed by the room owner.');
+        } else {
+            this.pendingReconnections.get(targetId)?.reject(new Error('kicked'));
+        }
+        return allowed;
     }
 
     override onDispose(): void {

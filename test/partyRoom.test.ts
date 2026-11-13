@@ -12,6 +12,7 @@ import appConfig from '../src/app.config.js';
 import { PROTOCOL_VERSION, ROOM } from '../src/shared/constants.js';
 import {
     ClientRequest,
+    KICKED_CODE,
     PARTY_ROOM_NAME,
     PROTOCOL_MISMATCH_CODE,
     type SetModeReply
@@ -136,5 +137,41 @@ describe('party room', () => {
         await host.waitForNextPatch();
         assert.equal(host.state.players.get(sessionId)?.connected, true);
         assert.equal(room.state.players.size, 2);
+    });
+
+    it('the owner can kick a connected player, who is told why', async () => {
+        const { room, host } = await createParty();
+        const guest = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Bo' });
+        const left = new Promise<number>((resolve) => guest.onLeave((code) => resolve(code)));
+
+        await assert.rejects(
+            guest.request(ClientRequest.KickPlayer, { playerId: host.sessionId }),
+            refusedWith('not_owner')
+        );
+        await assert.rejects(
+            host.request(ClientRequest.KickPlayer, { playerId: host.sessionId }),
+            refusedWith('invalid_target')
+        );
+
+        await host.request(ClientRequest.KickPlayer, { playerId: guest.sessionId });
+        assert.equal(await left, KICKED_CODE);
+        await host.waitForNextPatch();
+        assert.equal(room.state.players.has(guest.sessionId), false);
+        assert.equal(room.clients.length, 1);
+    });
+
+    it('kicking a dropped player frees their held slot', async () => {
+        const { room, host } = await createParty();
+        const guest = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Bo' });
+        const { sessionId, reconnectionToken } = guest;
+        guest.reconnection.enabled = false;
+        await guest.leave(false);
+        await host.waitForNextPatch();
+        assert.equal(room.state.players.get(sessionId)?.connected, false);
+
+        await host.request(ClientRequest.KickPlayer, { playerId: sessionId });
+        await host.waitForNextPatch();
+        assert.equal(room.state.players.has(sessionId), false);
+        await assert.rejects(colyseus.sdk.reconnect(reconnectionToken));
     });
 });

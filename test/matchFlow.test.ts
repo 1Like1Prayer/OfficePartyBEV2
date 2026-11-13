@@ -120,6 +120,56 @@ describe('competition', () => {
         assert.equal(party.state.round.phase, 'ready-check');
     });
 
+    it('the owner can skip to the next game mid-round; the unfinished round scores nothing', () => {
+        const party = createPartyHarness(['host', 'guest']);
+        party.lobby.setMode('host', 'custom', ['stop-the-clock', 'log-dodge']);
+        party.readyUp();
+        party.match.start('host');
+        playStopTheClockRound(party, 'host');
+        party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
+        party.playToTiming(); // round 2 is in progress
+
+        const refused = party.match.skipGame('guest');
+        assert.equal(!refused.ok && refused.error.code, 'not_owner');
+
+        const roundBefore = party.state.round.roundId;
+        assert.equal(party.match.skipGame('host').ok, true);
+        assert.equal(party.state.round.gameId, 'log-dodge');
+        assert.equal(party.state.round.roundInGame, 1);
+        assert.ok(party.state.round.roundId > roundBefore);
+        assert.equal(party.state.players.get('host')?.points, 1, 'points so far are kept');
+
+        const stale = party.match.markReady('host', roundBefore, 0);
+        assert.equal(!stale.ok && stale.error.code, 'stale_round');
+    });
+
+    it('skipping the last game goes to the final leaderboard', () => {
+        const party = startStopTheClock();
+        assert.equal(party.match.skipGame('host').ok, true);
+        assert.equal(party.state.phase, 'leaderboard');
+        assert.equal(party.messages(ServerMessage.Leaderboard).length, 1);
+        const refused = party.match.skipGame('host');
+        assert.equal(!refused.ok && refused.error.code, 'wrong_phase');
+    });
+
+    it('the owner can take everyone back to the lobby from a round or the leaderboard', () => {
+        const party = startStopTheClock();
+        party.playToTiming();
+        assert.equal(!party.match.backToLobby('guest').ok, true);
+        assert.equal(party.match.backToLobby('host').ok, true);
+        assert.equal(party.state.phase, 'lobby');
+        assert.equal(party.state.round.phase, 'idle');
+        const again = party.match.backToLobby('host');
+        assert.equal(!again.ok && again.error.code, 'wrong_phase');
+
+        party.readyUp();
+        party.match.start('host');
+        party.match.skipGame('host');
+        assert.equal(party.state.phase, 'leaderboard');
+        assert.equal(party.match.backToLobby('host').ok, true);
+        assert.equal(party.state.phase, 'lobby');
+    });
+
     it('when the owner drops mid-match, the next player takes over and play goes on', () => {
         const party = startStopTheClock(['host', 'guest', 'third']);
         party.members.markDisconnected('host');

@@ -5,11 +5,12 @@
  *   press start, skip results); the owner doesn't run anything.
  * - When the owner drops or leaves, ownership moves to whoever has been
  *   connected longest. The match keeps running.
+ * - The owner may remove (kick) anyone else, in any phase.
  * - Joining during the lobby is free; once a competition is running,
  *   newcomers watch until the room is back in the lobby.
  */
 
-import { refuse, succeed, type Outcome } from '../../platform/outcome.js';
+import { done, refuse, succeed, type Outcome } from '../../platform/outcome.js';
 import { sanitizeAvatar, sanitizeName } from '../../platform/identity.js';
 import type { PartyContext } from './partyContext.js';
 import { PlayerState } from './schema/PlayerState.js';
@@ -81,6 +82,14 @@ export class Members {
         if (!player) return refuse('not_in_room', 'You are not in this room.');
         player.name = sanitizeName(raw, player.name);
         return succeed({ name: player.name });
+    }
+
+    /** May `ownerId` remove `targetId`? Only the owner, never themselves. */
+    checkKick(ownerId: string, targetId: string): Outcome {
+        if (!this.isOwner(ownerId)) return refuse('not_owner', 'Only the room owner can remove players.');
+        if (targetId === ownerId) return refuse('invalid_target', 'You cannot remove yourself.');
+        if (!this.get(targetId)) return refuse('invalid_target', 'That player is not in the room.');
+        return done;
     }
 
     /** Back in the lobby: spectators play again and everyone re-confirms. */

@@ -23,6 +23,7 @@ import type { Lobby } from '../lobby.js';
 import type { MatchFlow } from '../matchFlow.js';
 import type { Members } from '../members.js';
 import {
+    kickPlayerRequest,
     progressMessage,
     roundActionRequest,
     setModeRequest,
@@ -41,6 +42,7 @@ interface PartyHandlerScope {
     readonly members: Members;
     readonly lobby: Lobby;
     readonly match: MatchFlow;
+    kickPlayer(ownerId: string, targetId: string): Outcome;
 }
 
 /** Resolve the request with the outcome's value, or reject it with its error. */
@@ -71,6 +73,18 @@ export const partyMessages = {
     [ClientRequest.SkipResults](this: PartyHandlerScope, client: Client, _message: unknown, ctx: MessageContext) {
         return reply(ctx, this.match.skipResults(client.sessionId));
     },
+
+    [ClientRequest.SkipGame](this: PartyHandlerScope, client: Client, _message: unknown, ctx: MessageContext) {
+        return reply(ctx, this.match.skipGame(client.sessionId));
+    },
+
+    [ClientRequest.ReturnToLobby](this: PartyHandlerScope, client: Client, _message: unknown, ctx: MessageContext) {
+        return reply(ctx, this.match.backToLobby(client.sessionId));
+    },
+
+    [ClientRequest.KickPlayer]: validate(kickPlayerRequest, function (this: PartyHandlerScope, client, message, ctx) {
+        return reply(ctx, this.kickPlayer(client.sessionId, message.playerId));
+    }),
 
     [ClientRequest.ReadyForRound]: validate(roundEnvelope, function (this: PartyHandlerScope, client, message, ctx) {
         return reply(ctx, this.match.markReady(client.sessionId, message.roundId, message.attempt));

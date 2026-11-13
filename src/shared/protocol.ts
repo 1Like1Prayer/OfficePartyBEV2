@@ -29,6 +29,9 @@ export const PARTY_ROOM_NAME = 'party';
 /** Close code for a client running an outdated build. It should reload. */
 export const PROTOCOL_MISMATCH_CODE = 4100;
 
+/** Close code for a player the room owner removed. The client should not rejoin by itself. */
+export const KICKED_CODE = 4102;
+
 /* ------------------------------------------------------------------ */
 /* Message names                                                        */
 /* ------------------------------------------------------------------ */
@@ -40,6 +43,12 @@ export const ClientRequest = {
     SetReady: 'lobby:ready',
     StartCompetition: 'lobby:start',
     SkipResults: 'competition:skip',
+    /** Owner: abandon the current game and go to the next (or the final leaderboard). */
+    SkipGame: 'competition:skipGame',
+    /** Owner: end the competition and take everyone back to the lobby. */
+    ReturnToLobby: 'competition:toLobby',
+    /** Owner: remove a player from the room. */
+    KickPlayer: 'room:kick',
     ReadyForRound: 'round:ready',
     SubmitResult: 'round:result',
     /** A mid-round request the game answers (e.g. casting the dice). */
@@ -84,7 +93,8 @@ export type ErrorCode =
     | 'wrong_phase'
     | 'stale_round'
     | 'duplicate_result'
-    | 'competition_in_progress';
+    | 'competition_in_progress'
+    | 'invalid_target';
 
 /** A refused request's reason: the rejected Error's `reason` property on the client. */
 export interface RequestError {
@@ -166,6 +176,10 @@ export interface SetModeRequest {
 
 export interface SetReadyRequest {
     ready: boolean;
+}
+
+export interface KickPlayerRequest {
+    playerId: string;
 }
 
 export interface SubmitResultRequest extends RoundEnvelope {

@@ -86,6 +86,33 @@ export class MatchFlow {
         return done;
     }
 
+    /**
+     * Owner's "next game" button: abandon whatever the current game is doing
+     * (mid-round included; the unfinished round awards nothing) and start the
+     * next game, or the final leaderboard if this was the last one.
+     */
+    skipGame(playerId: string): Outcome {
+        if (!this.members.isOwner(playerId)) return refuse('not_owner', 'Only the room owner can skip.');
+        if (this.ctx.state.phase !== 'competition' || this.competition === null) {
+            return refuse('wrong_phase', 'No game is being played.');
+        }
+        this.betweenRounds.clear();
+        this.endRound();
+        if (this.competition.skipGame()) this.startNextRound();
+        else this.finishCompetition();
+        return done;
+    }
+
+    /** Owner's "back to lobby" button: end the competition now, from any screen. */
+    backToLobby(playerId: string): Outcome {
+        if (!this.members.isOwner(playerId)) {
+            return refuse('not_owner', 'Only the room owner can end the competition.');
+        }
+        if (this.ctx.state.phase === 'lobby') return refuse('wrong_phase', 'Already in the lobby.');
+        this.returnToLobby();
+        return done;
+    }
+
     /* ----------------------- round actions, by roundId ----------------------- */
 
     markReady(playerId: string, roundId: number, attempt: number): Outcome {

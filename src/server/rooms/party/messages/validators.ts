@@ -34,6 +34,8 @@ export const setModeRequest = z.object({
 
 export const setReadyRequest = z.object({ ready: z.boolean() });
 
+export const kickPlayerRequest = z.object({ playerId: z.string().min(1).max(64) });
+
 export const roundEnvelope = z.object({
     roundId: z.number().int().nonnegative(),
     attempt: z.number().int().nonnegative()

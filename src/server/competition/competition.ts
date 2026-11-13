@@ -70,6 +70,13 @@ export class Competition {
         return this.gameCursor < this.playlist.length;
     }
 
+    /** Abandon the rest of the current game. Returns false when it was the last one. */
+    skipGame(): boolean {
+        this.roundCursor = 0;
+        this.gameCursor = Math.min(this.gameCursor + 1, this.playlist.length);
+        return this.gameCursor < this.playlist.length;
+    }
+
     /** One point per scoring round. A round with no winner awards nothing. */
     award(winnerId: string | null): void {
         if (winnerId === null) return;
