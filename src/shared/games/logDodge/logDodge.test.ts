@@ -327,6 +327,24 @@ test('progress accepts a hit count in range and nothing else', () => {
     assert.equal(parseLogDodgeProgress({ hits: 1.5 }), null);
     assert.equal(parseLogDodgeProgress({ hits: -1 }), null);
     assert.equal(parseLogDodgeProgress(null), null);
+    // The latest press rides along, as an index into ACTIONS and a round time.
+    assert.deepEqual(parseLogDodgeProgress({ hits: 1, pressAction: 1, pressAtMs: 4200 }), {
+        hits: 1,
+        pressAction: 1,
+        pressAtMs: 4200
+    });
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAction: 1 }), null);
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAtMs: 4200 }), null);
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAction: 2, pressAtMs: 4200 }), null);
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAction: 0, pressAtMs: -1 }), null);
+    // Press times are rounded like a result's, not rejected.
+    assert.deepEqual(parseLogDodgeProgress({ hits: 1, pressAction: 0, pressAtMs: 4200.37 }), {
+        hits: 1,
+        pressAction: 0,
+        pressAtMs: 4200
+    });
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAction: 0, pressAtMs: Number.NaN }), null);
+    assert.equal(parseLogDodgeProgress({ hits: 1, pressAction: 0, pressAtMs: 61_000 }), null);
 });
 
 /* ---------------- one survivor ends the round ---------------- */
