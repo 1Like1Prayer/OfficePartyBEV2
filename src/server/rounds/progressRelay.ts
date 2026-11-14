@@ -25,17 +25,19 @@ export class ProgressRelay {
      * @param deliver publishes an update to the room.
      * @param stillWanted checked before a held update goes out, so nothing is
      *   published for a player who has left or a round that has ended.
+     * @param minIntervalMs the least time between two updates from one player.
      */
     constructor(
         private readonly scheduler: Scheduler,
         private readonly deliver: (playerId: string, progress: Progress) => void,
-        private readonly stillWanted: (playerId: string) => boolean
+        private readonly stillWanted: (playerId: string) => boolean,
+        private readonly minIntervalMs: number = SELF_TIMED.PROGRESS_MIN_INTERVAL_MS
     ) {}
 
     /** Send now if the rate limit allows, otherwise hold the newest update. */
     submit(playerId: string, progress: Progress): void {
         const sinceLastMs = this.scheduler.now() - (this.lastSentAt.get(playerId) ?? -Infinity);
-        const waitMs = SELF_TIMED.PROGRESS_MIN_INTERVAL_MS - sinceLastMs;
+        const waitMs = this.minIntervalMs - sinceLastMs;
         if (waitMs <= 0) {
             this.sendNow(playerId, progress);
             return;

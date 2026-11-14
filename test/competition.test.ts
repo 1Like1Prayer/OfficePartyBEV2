@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { COMPETITION } from '../src/shared/constants.js';
 import { TYPE_RACER } from '../src/shared/games/typeRacer/constants.js';
 import { Competition } from '../src/server/competition/competition.js';
 import { buildCustomPlaylist, buildRandomPlaylist } from '../src/server/competition/playlist.js';
@@ -8,10 +7,11 @@ import { hmacRollFace } from '../src/server/games/diceRolls.js';
 import { playableGameIds, roundsForGame } from '../src/server/games/registry.js';
 
 describe('playlists', () => {
-    it('all six built games are playable', () => {
+    it('all seven built games are playable', () => {
         assert.deepEqual(playableGameIds().sort(), [
             'crusher-escalator',
             'cube-counter',
+            'hex-drop',
             'log-dodge',
             'minefield',
             'stop-the-clock',
@@ -19,9 +19,9 @@ describe('playlists', () => {
         ]);
     });
 
-    it('random mode picks distinct playable games', () => {
+    it('random mode plays every playable game, once each', () => {
         const playlist = buildRandomPlaylist();
-        assert.equal(playlist.length, COMPETITION.RANDOM_PLAYLIST_SIZE);
+        assert.equal(playlist.length, playableGameIds().length);
         assert.equal(new Set(playlist).size, playlist.length);
     });
 
@@ -31,7 +31,7 @@ describe('playlists', () => {
             playlist: ['log-dodge', 'minefield']
         });
         assert.equal(buildCustomPlaylist(['log-dodge', 'log-dodge']).ok, false);
-        assert.equal(buildCustomPlaylist(['hexa-gone']).ok, false);
+        assert.equal(buildCustomPlaylist(['mage-battle']).ok, false);
         assert.equal(buildCustomPlaylist([]).ok, false);
     });
 });

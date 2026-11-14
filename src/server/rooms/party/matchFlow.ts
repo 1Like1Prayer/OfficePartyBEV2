@@ -29,7 +29,8 @@ import {
     resetRound,
     writeProgress,
     writeRoundDescription,
-    writeRoundPosition
+    writeRoundPosition,
+    writeShared
 } from './roundSync.js';
 import { replaceArray } from './schema/sync.js';
 
@@ -202,6 +203,7 @@ export class MatchFlow {
                     onLifecycleChanged: () => writeRoundDescription(this.ctx.state.round, round.describe()),
                     onProgress: (playerId, progress) =>
                         writeProgress(this.ctx.state.round, playerId, progress),
+                    onSharedChanged: (values) => writeShared(this.ctx.state.round, values),
                     onRoundClosing: (payload) => this.ctx.broadcast(ServerMessage.RoundClosing, payload),
                     onAttemptResolved: (resolved) => this.onAttemptResolved(round, resolved)
                 }

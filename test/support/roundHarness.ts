@@ -14,6 +14,8 @@ export interface RoundHarness {
     clock: FakeScheduler;
     roundData: RoundDataPayload[];
     progress: Array<{ playerId: string; progress: Record<string, number> }>;
+    /** The attempt's shared world, as the room would sync it. */
+    shared: Record<string, number>;
     closing: RoundClosingPayload[];
     resolved: AttemptResolved[];
     /** Everyone ready, then advance through the start lead and the countdown. */
@@ -31,6 +33,7 @@ export const createRoundHarness = (
         clock,
         roundData: [] as RoundDataPayload[],
         progress: [] as RoundHarness['progress'],
+        shared: {} as Record<string, number>,
         closing: [] as RoundClosingPayload[],
         resolved: [] as AttemptResolved[]
     };
@@ -46,6 +49,10 @@ export const createRoundHarness = (
                 onRoundData: (payload) => harness.roundData.push(payload),
                 onLifecycleChanged: () => undefined,
                 onProgress: (playerId, progress) => harness.progress.push({ playerId, progress }),
+                onSharedChanged: (values) => {
+                    for (const key of Object.keys(harness.shared)) delete harness.shared[key];
+                    Object.assign(harness.shared, values);
+                },
                 onRoundClosing: (payload) => harness.closing.push(payload),
                 onAttemptResolved: (payload) => harness.resolved.push(payload)
             }

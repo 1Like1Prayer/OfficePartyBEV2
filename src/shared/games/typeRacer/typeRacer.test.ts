@@ -711,8 +711,11 @@ test('rank ignores the order results arrived in (latency cannot change the winne
     assert.deepEqual(typeRacer.rank(entries, round), typeRacer.rank([...entries].reverse(), round));
 });
 
+/** Type Racer keeps nothing in the shared world. */
+const noWorld = { raceMs: 0, get: () => undefined, set: () => undefined };
+
 test('handleAction returns the same roll the replay will use', () => {
-    const reply = typeRacer.handleAction!(round, 'unlucky', { type: 'roll', rollIndex: 0 });
+    const reply = typeRacer.handleAction!(round, 'unlucky', { type: 'roll', rollIndex: 0 }, noWorld);
     assert.deepEqual(reply, { face: 1, skulls: 1, isSkull: true });
 
     const ranked = typeRacer.rank([{ playerId: 'unlucky', result: resultOf(mistakes(3, 100)) }], round);
@@ -720,8 +723,8 @@ test('handleAction returns the same roll the replay will use', () => {
 });
 
 test('handleAction rejects malformed requests', () => {
-    assert.equal(typeRacer.handleAction!(round, 'a', { type: 'roll' }), null);
-    assert.equal(typeRacer.handleAction!(round, 'a', 'roll'), null);
+    assert.equal(typeRacer.handleAction!(round, 'a', { type: 'roll' }, noWorld), null);
+    assert.equal(typeRacer.handleAction!(round, 'a', 'roll', noWorld), null);
 });
 
 test('result timeout covers every paragraph running to its limit', () => {

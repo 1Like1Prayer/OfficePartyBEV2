@@ -38,7 +38,7 @@ const ROUND_KEYS: KeyList<RoundStateJson> = {
     totalGames: true, roundInGame: true, roundsPerGame: true, isTiebreak: true,
     participants: true, ready: true, waitingFor: true, readyDeadlineMs: true,
     startAtMs: true, countdownMs: true, timingStartsAtMs: true, resultTimeoutMs: true,
-    progress: true
+    progress: true, shared: true
 };
 
 const sortedKeys = (value: object): string[] => Object.keys(value).sort();
