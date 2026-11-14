@@ -74,8 +74,10 @@ export class AttemptRoster {
     }
 
     /** Results from players still in the attempt, for the game's early-close check. */
-    participantResults(): unknown[] {
-        return this.list().flatMap((id) => (this.results.has(id) ? [this.results.get(id)] : []));
+    participantResults(): ResultEntry<unknown>[] {
+        return this.list().flatMap((playerId) =>
+            this.results.has(playerId) ? [{ playerId, result: this.results.get(playerId) }] : []
+        );
     }
 
     /** Participants the attempt is still waiting on for a result. */

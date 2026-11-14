@@ -729,3 +729,71 @@ test('result timeout covers every paragraph running to its limit', () => {
         typeRacer.resultTimeoutMs(round) >= round.paragraphs.length * TYPE_RACER.PARAGRAPH_TIME_LIMIT_MS
     );
 });
+
+/* ---------------- closing the race and announcing results ---------------- */
+
+const entry = (playerId: string, events: TypingEvent[], endedAtMs?: number) => ({
+    playerId,
+    result: resultOf(events, endedAtMs)
+});
+const closesEarly = (reported: ReturnType<typeof entry>[], participantCount: number): boolean =>
+    typeRacer.shouldCloseEarly!(reported, participantCount, round);
+
+test('the race closes as soon as a replay shows someone finished: only the winner scores', () => {
+    assert.equal(closesEarly([entry('fast', lines(8, 1_000))], 4), true);
+});
+
+test('a report that claims nothing finished does not close the race', () => {
+    // Stopped part-way: not a finish, and not knocked out.
+    assert.equal(closesEarly([entry('stopped', lines(3, 500), 9_000)], 3), false);
+});
+
+test('the race closes when everyone but one has been knocked out', () => {
+    const out = [entry('unlucky', mistakes(3, 100)), entry('unlucky2', mistakes(3, 200))];
+    assert.equal(closesEarly(out.slice(0, 1), 3), false, 'two still typing');
+    assert.equal(closesEarly(out, 3), true, 'one left: they are the last survivor');
+});
+
+test('it does not close while the others reported but are not all out', () => {
+    // 'lucky' survives its roll in the stub and then simply stopped.
+    const reported = [entry('unlucky', mistakes(3, 100)), entry('lucky', mistakes(3, 100), 5_000)];
+    assert.equal(closesEarly(reported, 3), false);
+});
+
+test('a claimed finish the replay does not support does not close the race', () => {
+    // 'unlucky' claims eight finished lines, but the replay knocks them out first.
+    assert.equal(closesEarly([entry('unlucky', [...mistakes(3, 100), ...lines(8, 1_000)])], 3), false);
+});
+
+test('a knock-out is announced from the replay, whatever the player last reported', () => {
+    const skull = typeRacer.progressFromResult!(resultOf([...lines(1, 50), ...mistakes(3, 100)]), round, 'unlucky');
+    assert.deepEqual(skull, {
+        chars: 1,
+        paragraph: 0,
+        strikes: TYPE_RACER.STRIKES_TO_ROLL,
+        skulls: skullsForRoll(0),
+        status: 2
+    });
+
+    const timedOut = typeRacer.progressFromResult!(
+        resultOf([], TYPE_RACER.PARAGRAPH_TIME_LIMIT_MS + 1),
+        round,
+        'slow'
+    );
+    assert.equal(timedOut?.status, 2);
+    assert.equal(timedOut?.strikes, 0);
+});
+
+test('a finish is announced from the replay; a player who just stopped is not', () => {
+    const finished = typeRacer.progressFromResult!(resultOf(lines(8, 1_000)), round, 'fast');
+    assert.equal(finished?.status, 1);
+    assert.equal(finished?.chars, 8);
+    assert.equal(finished?.paragraph, round.paragraphs.length);
+
+    assert.equal(typeRacer.progressFromResult!(resultOf(lines(3, 500), 9_000), round, 'stopped'), null);
+});
+
+test('an announcement always passes the progress bounds the room accepts', () => {
+    const announced = typeRacer.progressFromResult!(resultOf(lines(8, 1_000)), round, 'fast')!;
+    assert.deepEqual(parseTypeRacerProgress(announced, round), announced);
+});

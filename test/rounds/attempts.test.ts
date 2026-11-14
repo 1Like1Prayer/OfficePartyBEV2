@@ -1,14 +1,14 @@
 /**
  * Further attempts inside one scoring round: tiebreakers, the coin flip once
- * they are exhausted, and staged games (Crusher Escalator heats -> final).
+ * they are exhausted, and staged games (heats -> final).
  */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { SELF_TIMED } from '../../src/shared/constants.js';
-import { CRUSHER_ESCALATOR } from '../../src/shared/games/crusherEscalator/constants.js';
-import { crusherEscalatorModule } from '../../src/shared/games/crusherEscalator/module.js';
+import type { AttemptTiming, RankedEntry, RoundContext } from '../../src/shared/games/selfTimed.js';
 import { stopTheClockModule, type StopTheClockRound } from '../../src/shared/games/stopTheClock.js';
+import type { AnySelfTimedModule } from '../../src/server/games/registry.js';
 import { decideAttemptOutcome } from '../../src/server/rounds/attemptOutcome.js';
 import { createRoundHarness, type RoundHarness } from '../support/roundHarness.js';
 
@@ -61,31 +61,48 @@ describe('tiebreakers', () => {
 });
 
 describe('stages', () => {
-    const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
+    const players = ['p1', 'p2', 'p3', 'p4'];
+    const OPENING: AttemptTiming = { startLeadMs: 1_000, countdownMs: 9_000 };
+    const FINAL: AttemptTiming = { startLeadMs: 2_000, countdownMs: 3_000 };
+    const PAUSE_MS = 3_000;
 
-    it('8 players: heats, a pause, then a 6-player final with a shorter run-up', () => {
-        const h = createRoundHarness(crusherEscalatorModule, 'crusher-escalator', players);
-        assert.equal(
-            h.round.describe().countdownMs,
-            SELF_TIMED.COUNTDOWN_MS + CRUSHER_ESCALATOR.HEATS_EXTRA_ANIMATION_MS,
-            'heats open with extra time for the sorting animation'
-        );
+    /**
+     * No built game has stages today, so this one is made up for the test:
+     * Stop the Clock, where the opening attempt is a heat whose best two go
+     * on to a final with a shorter run-up.
+     */
+    const staged: AnySelfTimedModule = {
+        ...stopTheClockModule,
+        createRoundData: (context: RoundContext) => ({
+            ...stopTheClockModule.createRoundData(context),
+            heat: context.attempt === 0
+        }),
+        openingTiming: () => OPENING,
+        nextStage: (ranked: RankedEntry[], round: { heat: boolean }) =>
+            round.heat
+                ? { participants: ranked.slice(0, 2).map((row) => row.playerId), pauseMs: PAUSE_MS, timing: FINAL }
+                : null
+    };
+
+    it('a heat, a pause, then a final among the qualifiers with its own run-up', () => {
+        const h = createRoundHarness(staged, 'stop-the-clock', players);
+        assert.equal(h.round.describe().countdownMs, OPENING.countdownMs, 'the opening uses the game\'s timing');
         h.playAttempt();
-        // Nobody pressed anything: two crushed players end the heats.
-        for (const id of players) h.round.submitResult(id, 0, { inputs: [], timingSuspect: false });
+        const target = (h.roundData.at(-1)!.data as StopTheClockRound).targetMs;
+        players.forEach((id, i) => h.round.submitResult(id, 0, { elapsedMs: target + i * 100, timingSuspect: false }));
 
-        const heats = h.resolved[0]!;
-        assert.equal(heats.isFinal, false);
-        assert.ok(heats.advancing !== null && heats.advancing.length >= CRUSHER_ESCALATOR.FINALISTS);
-        assert.equal(heats.stageBreakMs, CRUSHER_ESCALATOR.FINAL_PAUSE_MS);
+        const heat = h.resolved[0]!;
+        assert.equal(heat.isFinal, false);
+        assert.deepEqual(heat.advancing, ['p1', 'p2']);
+        assert.equal(heat.stageBreakMs, PAUSE_MS);
 
-        h.clock.advance(CRUSHER_ESCALATOR.FINAL_PAUSE_MS);
+        h.clock.advance(PAUSE_MS);
         const final = h.round.describe();
         assert.equal(final.attempt, 1);
         assert.equal(final.isTiebreak, false);
-        assert.deepEqual([...final.participants].sort(), [...heats.advancing!].sort());
+        assert.deepEqual(final.participants, ['p1', 'p2']);
         for (const id of final.participants) h.round.markReady(id, 1);
-        assert.equal(final.countdownMs, CRUSHER_ESCALATOR.FINAL_COUNTDOWN_MS);
-        assert.equal(h.round.describe().startAtMs! - h.clock.now(), CRUSHER_ESCALATOR.FINAL_START_LEAD_MS);
+        assert.equal(h.round.describe().countdownMs, FINAL.countdownMs);
+        assert.equal(h.round.describe().startAtMs! - h.clock.now(), FINAL.startLeadMs);
     });
 });

@@ -518,8 +518,12 @@ test('once a player has finished, the others are told to stop and report', () =>
     const round = roundOf(clearMap);
     const finished = resultOf([right]);
     const racing = resultOf([stop(0)]);
-    assert.equal(minefieldModule.shouldCloseEarly?.([racing], 3, round), false);
-    assert.equal(minefieldModule.shouldCloseEarly?.([racing, finished], 3, round), true);
+    const entry = (playerId: string, result: typeof racing) => ({ playerId, result });
+    assert.equal(minefieldModule.shouldCloseEarly?.([entry('a', racing)], 3, round), false);
+    assert.equal(
+        minefieldModule.shouldCloseEarly?.([entry('a', racing), entry('b', finished)], 3, round),
+        true
+    );
 });
 
 test('the timing and the animation lengths', () => {
