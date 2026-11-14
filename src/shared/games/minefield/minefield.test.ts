@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { RandomSource } from '../random.js';
 import { MINEFIELD } from './constants.js';
-import { densityAt, generateMap, hasSafeRoute } from './map.js';
+import { densityAt, fieldHeightFor, generateMap, hasSafeRoute } from './map.js';
 import { minefieldModule } from './module.js';
 import { parseMinefieldProgress, parseMinefieldResult } from './parsing.js';
 import { isScanShowing, minesInSonarRange, revealedMines, simulateRace, simulateRun } from './simulate.js';
@@ -19,11 +19,17 @@ const seededRandom = (seed: number): RandomSource => {
     };
 };
 
+/** The hand-built test field: as wide as a four-player one, everyone starting in the middle. */
+const HEIGHT = 15;
+const START_Y = 7.5;
+const FOUR = ['a', 'b', 'c', 'd'];
+
 const mapWith = (mines: Mine[]): MinefieldMap => ({
     width: MINEFIELD.WIDTH,
-    height: MINEFIELD.HEIGHT,
+    height: HEIGHT,
     startX: MINEFIELD.START_X,
-    startY: MINEFIELD.START_Y,
+    startY: START_Y,
+    starts: {},
     finishX: MINEFIELD.FINISH_X,
     mines
 });
@@ -59,7 +65,7 @@ test('diagonal movement is no faster than straight', () => {
         [{ kind: 'move', atMs: 0, dx: 1, dy: 1 }],
         2_000
     );
-    const travelled = Math.hypot(diagonal.x - MINEFIELD.START_X, diagonal.y - MINEFIELD.START_Y);
+    const travelled = Math.hypot(diagonal.x - MINEFIELD.START_X, diagonal.y - START_Y);
     assert.ok(Math.abs(travelled - (straight.x - MINEFIELD.START_X)) < 0.05);
 });
 
@@ -77,8 +83,29 @@ test('releasing the keys stops the runner', () => {
     assert.ok(Math.abs(outcome.x - (MINEFIELD.START_X + 4)) < 0.1);
 });
 
+test('the last step\'s movement is reported, so a renderer can draw between steps', () => {
+    const step = (MINEFIELD.SPEED_TILES_PER_S * MINEFIELD.STEP_MS) / 1000;
+    const running = simulateRun(mapWith([]), [right], 1_000);
+    assert.ok(Math.abs(running.stepX - step) < 1e-9);
+    assert.equal(running.stepY, 0);
+
+    const diagonal = simulateRun(mapWith([]), [{ kind: 'move', atMs: 0, dx: 1, dy: -1 }], 1_000);
+    assert.ok(Math.abs(diagonal.stepX * diagonal.stepX + diagonal.stepY * diagonal.stepY - step * step) < 1e-9);
+
+    // Standing still, scanning, blown up or against the edge: nothing to carry on.
+    for (const outcome of [
+        simulateRun(mapWith([]), [right, stop(500)], 1_000),
+        simulateRun(mapWith([]), [right, sonar(500)], 1_000),
+        simulateRun(mapWith([{ x: 4, y: START_Y }]), [right], 1_000),
+        simulateRun(mapWith([]), [{ kind: 'move', atMs: 0, dx: 0, dy: -1 }], 5_000)
+    ]) {
+        assert.equal(outcome.stepX, 0);
+        assert.equal(outcome.stepY, 0);
+    }
+});
+
 test('the same inputs always give the same result', () => {
-    const map = generateMap(seededRandom(1));
+    const map = generateMap(FOUR, seededRandom(1));
     const inputs: Input[] = [right, sonar(500), stop(3_000)];
     assert.deepEqual(simulateRun(map, inputs), simulateRun(map, inputs));
 });
@@ -86,7 +113,7 @@ test('the same inputs always give the same result', () => {
 /* ---------------- mines and lives ---------------- */
 
 test('walking into a mine costs a life, the mine is gone, and the runner is held for the explosion', () => {
-    const mine = { x: 10, y: MINEFIELD.START_Y };
+    const mine = { x: 10, y: START_Y };
     const outcome = simulateRun(mapWith([mine]), [right], 20_000);
 
     assert.equal(outcome.detonations.length, 1);
@@ -101,22 +128,22 @@ test('walking into a mine costs a life, the mine is gone, and the runner is held
 });
 
 test('the runner stands still for the explosion animation, then carries on', () => {
-    const outcome = simulateRun(mapWith([{ x: 10, y: MINEFIELD.START_Y }]), [right], 20_000);
+    const outcome = simulateRun(mapWith([{ x: 10, y: START_Y }]), [right], 20_000);
     const hitAt = outcome.detonations[0]!.atMs;
 
     const during = simulateRun(
-        mapWith([{ x: 10, y: MINEFIELD.START_Y }]),
+        mapWith([{ x: 10, y: START_Y }]),
         [right],
         hitAt + MINEFIELD.EXPLOSION_ANIMATION_MS - MINEFIELD.STEP_MS * 2
     );
-    const atHit = simulateRun(mapWith([{ x: 10, y: MINEFIELD.START_Y }]), [right], hitAt);
+    const atHit = simulateRun(mapWith([{ x: 10, y: START_Y }]), [right], hitAt);
     assert.ok(Math.abs(during.x - atHit.x) < 1e-9, 'still while the explosion plays');
     assert.ok(outcome.x > atHit.x + 1, 'moving again afterwards');
 });
 
 test('a mine that has gone off is gone for good', () => {
     const outcome = simulateRun(
-        mapWith([{ x: 10, y: MINEFIELD.START_Y }]),
+        mapWith([{ x: 10, y: START_Y }]),
         [right, stop(2_500), { kind: 'move', atMs: 4_000, dx: -1, dy: 0 }, { kind: 'move', atMs: 5_500, dx: 1, dy: 0 }],
         15_000
     );
@@ -125,8 +152,8 @@ test('a mine that has gone off is gone for good', () => {
 
 test('the second mine ends the race', () => {
     const mines = [
-        { x: 10, y: MINEFIELD.START_Y },
-        { x: 20, y: MINEFIELD.START_Y }
+        { x: 10, y: START_Y },
+        { x: 20, y: START_Y }
     ];
     const outcome = simulateRun(mapWith(mines), [right], 30_000);
     assert.equal(outcome.detonations.length, 2);
@@ -138,8 +165,8 @@ test('the second mine ends the race', () => {
 test('a cluster cannot take both lives in one go: a blast protects the runner for a moment', () => {
     // Two mines 1 tile apart, on the way.
     const mines = [
-        { x: 10, y: MINEFIELD.START_Y },
-        { x: 11, y: MINEFIELD.START_Y }
+        { x: 10, y: START_Y },
+        { x: 11, y: START_Y }
     ];
     const outcome = simulateRun(mapWith(mines), [right], 30_000);
     const [first, second] = outcome.detonations;
@@ -153,7 +180,7 @@ test('a cluster cannot take both lives in one go: a blast protects the runner fo
 
 test('a mine well off to the side is harmless', () => {
     const outcome = simulateRun(
-        mapWith([{ x: 20, y: MINEFIELD.START_Y + MINEFIELD.TRIGGER_RADIUS + 0.2 }]),
+        mapWith([{ x: 20, y: START_Y + MINEFIELD.TRIGGER_RADIUS + 0.2 }]),
         [right]
     );
     assert.equal(outcome.detonations.length, 0);
@@ -161,7 +188,7 @@ test('a mine well off to the side is harmless', () => {
 });
 
 test('a mine in the way can be dodged by steering round it', () => {
-    const mine = { x: 20, y: MINEFIELD.START_Y };
+    const mine = { x: 20, y: START_Y };
     const dodge: Input[] = [
         right,
         { kind: 'move', atMs: 3_500, dx: 0, dy: 1 },
@@ -180,7 +207,7 @@ const shifted = (dy: number, startMs: number): Input[] => [
 ];
 
 test('two runners inside a mine\'s radius when it goes off are both hit by it', () => {
-    const map = mapWith([{ x: 10, y: MINEFIELD.START_Y + 0.2 }]);
+    const map = mapWith([{ x: 10, y: START_Y + 0.2 }]);
     const race = simulateRace(map, [
         // b steps aside first while a waits, so the two stay level as they run.
         { playerId: 'a', inputs: [{ ...right, atMs: 100 }] },
@@ -196,7 +223,7 @@ test('two runners inside a mine\'s radius when it goes off are both hit by it', 
 });
 
 test('a runner outside the radius when it goes off is not hurt', () => {
-    const map = mapWith([{ x: 10, y: MINEFIELD.START_Y }]);
+    const map = mapWith([{ x: 10, y: START_Y }]);
     const race = simulateRace(map, [
         { playerId: 'a', inputs: [right] },
         // Running alongside, but a tile further over: out of reach.
@@ -208,7 +235,7 @@ test('a runner outside the radius when it goes off is not hurt', () => {
 });
 
 test('a mine goes off only once: a runner who arrives after it has gone is not hurt', () => {
-    const map = mapWith([{ x: 10, y: MINEFIELD.START_Y }]);
+    const map = mapWith([{ x: 10, y: START_Y }]);
     const race = simulateRace(map, [
         { playerId: 'first', inputs: [right] },
         { playerId: 'second', inputs: [{ ...right, atMs: 2_000 }] }
@@ -219,7 +246,7 @@ test('a mine goes off only once: a runner who arrives after it has gone is not h
 });
 
 test('a runner following another through the field is spared the mines the leader set off', () => {
-    const map = mapWith([10, 14].map((x) => ({ x, y: MINEFIELD.START_Y })));
+    const map = mapWith([10, 14].map((x) => ({ x, y: START_Y })));
     const alone = simulateRun(map, [{ ...right, atMs: 5_000 }]);
     assert.equal(alone.livesLeft, 0, 'on their own the follower would have been knocked out');
 
@@ -234,7 +261,7 @@ test('a runner following another through the field is spared the mines the leade
 
 test('every mine appears in the explosions at most once', () => {
     for (let seed = 1; seed <= 20; seed++) {
-        const map = generateMap(seededRandom(seed));
+        const map = generateMap(FOUR, seededRandom(seed));
         const race = simulateRace(map, [
             { playerId: 'a', inputs: [right] },
             { playerId: 'b', inputs: [{ ...right, atMs: 700 }] },
@@ -247,7 +274,7 @@ test('every mine appears in the explosions at most once', () => {
 
 test('the result does not depend on the order the runners are listed in', () => {
     for (let seed = 1; seed <= 15; seed++) {
-        const map = generateMap(seededRandom(seed));
+        const map = generateMap(FOUR, seededRandom(seed));
         const runners = [
             { playerId: 'a', inputs: [right] },
             { playerId: 'b', inputs: shifted(1, 0) },
@@ -261,7 +288,7 @@ test('the result does not depend on the order the runners are listed in', () => 
 });
 
 test('the race stops when someone finishes: later explosions do not count', () => {
-    const map = mapWith([{ x: 52, y: MINEFIELD.START_Y }]);
+    const map = mapWith([{ x: 52, y: START_Y }]);
     const race = simulateRace(map, [
         { playerId: 'fast', inputs: [{ kind: 'move', atMs: 0, dx: 1, dy: -1 }, { kind: 'move', atMs: 1_800, dx: 1, dy: 0 }] },
         { playerId: 'slow', inputs: [{ ...right, atMs: 5_000 }] }
@@ -320,7 +347,7 @@ test('a scan records where the runner stood, so others can be shown what it foun
     const [scan] = outcome.scans;
     assert.equal(scan!.atMs, 1_504); // the first step on or after 1500 ms
     assert.ok(Math.abs(scan!.x - (MINEFIELD.START_X + 4)) < 0.1);
-    assert.equal(scan!.y, MINEFIELD.START_Y);
+    assert.equal(scan!.y, START_Y);
 });
 
 test('sonar is shared: a scan by one runner shows its mines to everyone, for a limited time', () => {
@@ -353,12 +380,12 @@ test('scans from several runners add up, and mines that have gone off are never 
 
 test('generated fields keep the start and finish clear and mines apart', () => {
     for (let seed = 1; seed <= 40; seed++) {
-        const map = generateMap(seededRandom(seed));
+        const map = generateMap(FOUR, seededRandom(seed));
         assert.ok(map.mines.length > 20, `seed ${seed}: ${map.mines.length}`);
         for (const mine of map.mines) {
             assert.ok(mine.x >= MINEFIELD.START_SAFE_TILES, `seed ${seed}`);
             assert.ok(mine.x <= MINEFIELD.FINISH_X - MINEFIELD.FINISH_SAFE_TILES, `seed ${seed}`);
-            assert.ok(mine.y >= 0.5 && mine.y <= MINEFIELD.HEIGHT - 0.5);
+            assert.ok(mine.y >= 0.5 && mine.y <= map.height - 0.5);
         }
         for (const [i, a] of map.mines.entries()) {
             for (const b of map.mines.slice(i + 1)) {
@@ -370,7 +397,7 @@ test('generated fields keep the start and finish clear and mines apart', () => {
 
 test('every generated field can be crossed without setting off a mine', () => {
     for (let seed = 1; seed <= 40; seed++) {
-        assert.ok(hasSafeRoute(generateMap(seededRandom(seed))), `seed ${seed}`);
+        assert.ok(hasSafeRoute(generateMap(FOUR, seededRandom(seed))), `seed ${seed}`);
     }
 });
 
@@ -385,12 +412,56 @@ test('the field gets denser towards the finish', () => {
     let near = 0;
     let far = 0;
     for (let seed = 1; seed <= 30; seed++) {
-        for (const mine of generateMap(seededRandom(seed)).mines) {
+        for (const mine of generateMap(FOUR, seededRandom(seed)).mines) {
             if (mine.x < MINEFIELD.WIDTH / 2) near++;
             else far++;
         }
     }
     assert.ok(far > near * 1.3, `${near} near vs ${far} far`);
+});
+
+test('the field widens with the players and its mines grow in proportion', () => {
+    const average = (players: number) => {
+        const ids = Array.from({ length: players }, (_, i) => `p${i}`);
+        let mines = 0;
+        for (let seed = 1; seed <= 20; seed++) mines += generateMap(ids, seededRandom(seed)).mines.length;
+        return mines / 20;
+    };
+    assert.equal(fieldHeightFor(2), 13);
+    assert.equal(fieldHeightFor(4), 15);
+    assert.equal(fieldHeightFor(12), MINEFIELD.MAX_HEIGHT);
+    assert.equal(fieldHeightFor(1), fieldHeightFor(2), 'never narrower than for two');
+    // Mines per row stays about the same however many play.
+    const perRowForTwo = average(2) / fieldHeightFor(2);
+    const perRowForTwelve = average(12) / fieldHeightFor(12);
+    assert.ok(Math.abs(perRowForTwelve - perRowForTwo) / perRowForTwo < 0.1, `${perRowForTwo} vs ${perRowForTwelve}`);
+});
+
+test('every player gets their own spot on the same start line', () => {
+    for (const players of [2, 3, 7, 12]) {
+        const ids = Array.from({ length: players }, (_, i) => `p${i}`);
+        for (let seed = 1; seed <= 10; seed++) {
+            const map = generateMap(ids, seededRandom(seed));
+            const spots = ids.map((id) => map.starts[id]!);
+            assert.equal(new Set(spots).size, players, 'nobody shares a spot');
+            for (const y of spots) assert.ok(y >= 1 && y <= map.height - 1, `${players} players: ${y}`);
+            const sorted = [...spots].sort((a, b) => a - b);
+            for (let i = 1; i < sorted.length; i++) {
+                assert.ok(sorted[i]! - sorted[i - 1]! >= 1.5, 'room to run without a neighbour\'s blast');
+                assert.ok(sorted[i]! - sorted[i - 1]! >= MINEFIELD.TRIGGER_RADIUS * 2);
+            }
+            assert.ok(hasSafeRoute(map));
+        }
+    }
+});
+
+test('runners start from their own spot', () => {
+    const map = { ...mapWith([]), starts: { a: 3, b: 11 } };
+    const race = simulateRace(map, [{ playerId: 'a', inputs: [] }, { playerId: 'b', inputs: [] }], 1_000);
+    assert.equal(race.outcomes.get('a')!.y, 3);
+    assert.equal(race.outcomes.get('b')!.y, 11);
+    assert.equal(race.outcomes.get('a')!.x, MINEFIELD.START_X);
+    assert.equal(simulateRun(map, [], 1_000, 'b').y, 11);
 });
 
 test('every round gets its own field', () => {
@@ -438,8 +509,8 @@ test('only the first finisher wins: a second finisher after them still loses', (
 
 test('a runner who was knocked out loses to one still running when the race ended', () => {
     const mines = [
-        { x: 10, y: MINEFIELD.START_Y },
-        { x: 14, y: MINEFIELD.START_Y }
+        { x: 10, y: START_Y },
+        { x: 14, y: START_Y }
     ];
     const ranked = minefieldModule.rank(
         [
@@ -478,7 +549,7 @@ test('if nobody finishes, the player who got furthest wins', () => {
 });
 
 test('if everybody is knocked out, whoever lasted longest wins', () => {
-    const mines = [10, 14, 18, 22].map((x) => ({ x, y: MINEFIELD.START_Y }));
+    const mines = [10, 14, 18, 22].map((x) => ({ x, y: START_Y }));
     const ranked = minefieldModule.rank(
         [
             // Takes the first two mines and is out.
@@ -573,14 +644,21 @@ test('malformed results are rejected', () => {
 });
 
 test('progress accepts position, lives and status in range and nothing else', () => {
-    const ok = { x: 123, lives: 1, status: 0, mine: 4, scans: 2, scanX: 100, scanY: 70 };
+    const ok = {
+        x: 123, y: 40, t: 5_000, lives: 1, status: 0,
+        mine: 4, mineT: 3_000, scans: 2, scanX: 100, scanY: 70, scanT: 4_200
+    };
     assert.deepEqual(parseMinefieldProgress(ok, 50), ok);
-    // The sonar and mine fields are optional.
+    // Everything but position, lives and status is optional.
     assert.deepEqual(parseMinefieldProgress({ x: 1, lives: 1, status: 0 }, 50), {
-        x: 1, lives: 1, status: 0, mine: 0, scans: 0, scanX: 0, scanY: 0
+        x: 1, y: 0, t: 0, lives: 1, status: 0, mine: 0, mineT: 0, scans: 0, scanX: 0, scanY: 0, scanT: 0
     });
+    assert.equal(parseMinefieldProgress({ ...ok, y: 151 }, 50, 15), null);
+    assert.equal(parseMinefieldProgress({ ...ok, t: MINEFIELD.MAX_RACE_MS + 1 }, 50), null);
+    assert.equal(parseMinefieldProgress({ ...ok, mineT: -1 }, 50), null);
+    assert.equal(parseMinefieldProgress({ ...ok, scanT: 0.5 }, 50), null);
     assert.equal(parseMinefieldProgress({ ...ok, scanX: 601 }, 50), null);
-    assert.equal(parseMinefieldProgress({ ...ok, scanY: 151 }, 50), null);
+    assert.equal(parseMinefieldProgress({ ...ok, scanY: 151 }, 50, 15), null);
     assert.equal(parseMinefieldProgress({ ...ok, scans: 1_000 }, 50), null);
     assert.equal(parseMinefieldProgress({ ...ok, scans: 1.5 }, 50), null);
     assert.equal(parseMinefieldProgress({ ...ok, x: 601 }, 50), null);
