@@ -302,8 +302,9 @@ test('equal scores at the time cap share rank 1, which triggers a tiebreaker', (
 test('closing early: once all but one have reported, the last is told to stop', () => {
     const close = crusherEscalatorModule.shouldCloseEarly!;
     const round = roundWith(['a', 'b', 'c']);
-    assert.equal(close([result([])], 3, round), false);
-    assert.equal(close([result([]), result([])], 3, round), true);
+    const entry = (playerId: string) => ({ playerId, result: result([]) });
+    assert.equal(close([entry('a')], 3, round), false);
+    assert.equal(close([entry('a'), entry('b')], 3, round), true);
 });
 
 test('parseResult accepts well-formed presses and rejects bad ones', () => {

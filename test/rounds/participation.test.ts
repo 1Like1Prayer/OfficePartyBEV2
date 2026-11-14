@@ -10,6 +10,8 @@ import { crusherEscalatorModule } from '../../src/shared/games/crusherEscalator/
 import { LOG_DODGE } from '../../src/shared/games/logDodge/constants.js';
 import { logDodgeModule } from '../../src/shared/games/logDodge/module.js';
 import { stopTheClockModule } from '../../src/shared/games/stopTheClock.js';
+import { TYPE_RACER } from '../../src/shared/games/typeRacer/constants.js';
+import { totalCharacters } from '../../src/shared/games/typeRacer/progress.js';
 import { getSelfTimedModule } from '../../src/server/games/registry.js';
 import { createRoundHarness } from '../support/roundHarness.js';
 
@@ -48,6 +50,34 @@ describe('early closing', () => {
         assert.equal(h.closing.length, 0);
         h.round.submitResult('b', 0, noInputs);
         assert.deepEqual(h.closing[0]!.pending, ['c']);
+    });
+
+    it('Type Racer: once someone finishes, everyone still typing is told to stop', () => {
+        const h = createRoundHarness(typeRacer, 'type-racer-roulette', ['a', 'b', 'c']);
+        h.playAttempt();
+        const { paragraphs } = h.roundData.at(-1)!.data as { paragraphs: string[][] };
+        // One line a second, waiting out the pause after each paragraph.
+        const events: Array<{ kind: 'line'; atMs: number }> = [];
+        let atMs = 0;
+        for (const [index, paragraph] of paragraphs.entries()) {
+            if (index > 0) atMs += TYPE_RACER.PARAGRAPH_PAUSE_MS;
+            for (let line = 0; line < paragraph.length; line++) events.push({ kind: 'line', atMs: (atMs += 1_000) });
+        }
+        h.round.submitResult('a', 0, { events, endedAtMs: atMs, timingSuspect: false });
+
+        assert.deepEqual(h.closing[0]!.pending, ['b', 'c']);
+        // The room hears that 'a' finished from the server's own replay.
+        assert.deepEqual(h.progress.at(-1), {
+            playerId: 'a',
+            progress: { chars: totalCharacters(paragraphs), paragraph: paragraphs.length, strikes: 0, skulls: 1, status: 1 }
+        });
+    });
+
+    it('Type Racer: a player who merely dropped out does not end the race', () => {
+        const h = createRoundHarness(typeRacer, 'type-racer-roulette', ['a', 'b']);
+        h.playAttempt();
+        h.round.dropParticipant('b');
+        assert.equal(h.closing.length, 0);
     });
 
     it('games that do not end early never send a closing notice', () => {

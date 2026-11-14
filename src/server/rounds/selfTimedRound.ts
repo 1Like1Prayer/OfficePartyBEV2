@@ -130,7 +130,7 @@ export class SelfTimedRound {
         if (parsed === null) return refuse('invalid_payload', 'Malformed result.');
 
         this.roster.recordResult(playerId, parsed);
-        const announced = this.module.progressFromResult?.(parsed, this.roundData) ?? null;
+        const announced = this.module.progressFromResult?.(parsed, this.roundData, playerId) ?? null;
         if (announced !== null) this.progress.sendNow(playerId, announced);
         this.afterParticipationChanged();
         return done;
