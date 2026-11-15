@@ -1,7 +1,8 @@
 # Office Party V2
 
-The Colyseus server for seven office-party minigames: Minefield, Cube Counter,
-Crusher Escalator, Stop the Clock, Type Racer Roulette, Log Dodge and Hex Drop.
+The Colyseus server for eight office-party minigames: Minefield, Cube Counter,
+Crusher Escalator, Stop the Clock, Type Racer Roulette, Log Dodge, Hex Drop
+and Mage Battle.
 
 Six are **self-timed**: each browser plays the round on its own clock and
 reports what happened, and the server replays the reports to decide the
@@ -12,6 +13,12 @@ Hex Drop is played in one **shared world**: each browser moves its own runner,
 the server owns the tiles (when each one drops), and the other runners are
 drawn from positions shared 20 times a second. It runs on the same round
 runner. See `src/server/games/registry.ts`.
+
+Mage Battle is a free-for-all of quick-time duels. Each browser turns its own
+dial and sends the time of each press. The server replays that dial to decide
+what the press scored, and keeps every dial and score in the shared world, so
+each screen can draw everyone's duel. Fall 7 points behind the leader and
+you're out. The last mage standing wins, or the highest score after 60 seconds.
 
 ## Scripts
 

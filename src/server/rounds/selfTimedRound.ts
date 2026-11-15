@@ -15,7 +15,7 @@
  */
 
 import { SELF_TIMED } from '../../shared/constants.js';
-import type { AttemptTiming, SharedWorld } from '../../shared/games/selfTimed.js';
+import type { AttemptTiming, SharedWorld, SharedWorldView } from '../../shared/games/selfTimed.js';
 import type { RoundDataPayload, RoundPhase } from '../../shared/protocol.js';
 import type { AnySelfTimedModule } from '../games/registry.js';
 import { done, refuse, succeed, type Outcome } from '../platform/outcome.js';
@@ -149,7 +149,10 @@ export class SelfTimedRound {
             return refuse('invalid_payload', 'This game has no actions.');
         }
         const reply = this.module.handleAction(this.roundData, playerId, raw, this.sharedWorld());
-        return reply === null ? refuse('invalid_payload', 'Malformed action.') : succeed(reply);
+        if (reply === null) return refuse('invalid_payload', 'Malformed action.');
+        // An action can decide the round (Mage Battle's last knock-out).
+        this.closeEarlyIfDecided();
+        return succeed(reply);
     }
 
     /** Display-only, rate limited, and never allowed to affect the outcome. */
@@ -216,6 +219,11 @@ export class SelfTimedRound {
             participants: this.roster.list(),
             resultTimeoutMs: this.module.resultTimeoutMs(this.roundData)
         };
+    }
+
+    /** The shared world, read-only, as ranking and the early-close check see it. */
+    private sharedView(): SharedWorldView {
+        return { get: (key) => this.shared.get(key) };
     }
 
     /** The shared world as a game's action sees it, timed from this attempt's start. */
@@ -318,7 +326,7 @@ export class SelfTimedRound {
     private closeEarlyIfDecided(): void {
         if (this.closing.hasClosed || this.phase !== 'playing' || !this.module.shouldCloseEarly) return;
         const reported = this.roster.participantResults();
-        if (this.module.shouldCloseEarly(reported, this.roster.size, this.roundData)) {
+        if (this.module.shouldCloseEarly(reported, this.roster.size, this.roundData, this.sharedView())) {
             this.closing.close(this.roster.pending());
         }
     }
@@ -331,7 +339,7 @@ export class SelfTimedRound {
         this.phase = 'results';
         this.events.onLifecycleChanged();
 
-        const ranked = this.module.rank(this.roster.resultEntries(), this.roundData);
+        const ranked = this.module.rank(this.roster.resultEntries(), this.roundData, this.sharedView());
         const noShow = this.roster.pending();
         const stage = this.module.nextStage?.(ranked, this.roundData) ?? null;
         const outcome = decideAttemptOutcome(ranked, stage, this.tiebreakersRun);

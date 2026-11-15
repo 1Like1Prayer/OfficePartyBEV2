@@ -26,6 +26,7 @@ import type { Members } from './members.js';
 import type { PartyContext } from './partyContext.js';
 import {
     clearProgress,
+    clearShared,
     resetRound,
     writeProgress,
     writeRoundDescription,
@@ -198,6 +199,8 @@ export class MatchFlow {
                 events: {
                     onRoundData: (payload) => {
                         clearProgress(this.ctx.state.round);
+                        // A new round is a new runner, which knows nothing of the last round's world.
+                        clearShared(this.ctx.state.round);
                         this.ctx.broadcast(ServerMessage.RoundData, payload);
                     },
                     onLifecycleChanged: () => writeRoundDescription(this.ctx.state.round, round.describe()),
