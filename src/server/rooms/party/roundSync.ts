@@ -50,6 +50,10 @@ export const clearProgress = (round: RoundState): void => {
     round.progress.clear();
 };
 
+export const writeShared = (round: RoundState, values: Readonly<Record<string, number>>): void => {
+    replaceMap(round.shared, values);
+};
+
 /** Back to the lobby: no round. */
 export const resetRound = (round: RoundState): void => {
     round.phase = 'idle';
@@ -69,4 +73,5 @@ export const resetRound = (round: RoundState): void => {
     round.timingStartsAtMs = undefined;
     round.resultTimeoutMs = 0;
     clearProgress(round);
+    round.shared.clear();
 };

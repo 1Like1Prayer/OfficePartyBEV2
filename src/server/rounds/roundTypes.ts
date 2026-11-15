@@ -37,6 +37,8 @@ export interface SelfTimedRoundEvents {
     onLifecycleChanged(): void;
     /** A player's display-only progress, already validated and rate limited. */
     onProgress(playerId: string, progress: Record<string, number>): void;
+    /** The round's shared world changed (see SharedWorld): these are all its values now. */
+    onSharedChanged(values: Readonly<Record<string, number>>): void;
     /** The round is decided; the listed players must stop and report. */
     onRoundClosing(payload: RoundClosingPayload): void;
     onAttemptResolved(resolved: AttemptResolved): void;

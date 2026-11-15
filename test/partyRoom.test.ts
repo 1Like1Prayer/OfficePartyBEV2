@@ -101,7 +101,7 @@ describe('party room', () => {
         // Typed clients can't even express this; a hand-rolled one still gets refused.
         await assert.rejects(host.request(ClientRequest.SetMode, { mode: 'everything' } as never));
         await assert.rejects(
-            host.request(ClientRequest.SetMode, { mode: 'custom', gameIds: ['hexa-gone'] }),
+            host.request(ClientRequest.SetMode, { mode: 'custom', gameIds: ['mage-battle'] }),
             refusedWith('invalid_playlist')
         );
         const custom = (await host.request(ClientRequest.SetMode, {

@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { AVATAR, COMPETITION, ROOM } from '../../../../shared/constants.js';
+import { AVATAR, ROOM } from '../../../../shared/constants.js';
 import { GAME_IDS } from '../../../../shared/games/catalog.js';
 
 /** Generous: names are trimmed and cut by `sanitizeName`; this only refuses absurd payloads. */
@@ -29,7 +29,8 @@ export const setNameRequest = z.object({ name: nameField });
 
 export const setModeRequest = z.object({
     mode: z.enum(['random', 'custom']),
-    gameIds: z.array(z.enum(GAME_IDS)).max(COMPETITION.MAX_CUSTOM_PLAYLIST_SIZE).optional()
+    // Bounded by the catalog: a playlist cannot hold more distinct games than exist.
+    gameIds: z.array(z.enum(GAME_IDS)).max(GAME_IDS.length).optional()
 });
 
 export const setReadyRequest = z.object({ ready: z.boolean() });

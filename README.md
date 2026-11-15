@@ -1,13 +1,17 @@
 # Office Party V2
 
-The Colyseus server for six office-party minigames: Minefield, Cube Counter,
-Crusher Escalator, Stop the Clock, Type Racer Roulette and Log Dodge.
+The Colyseus server for seven office-party minigames: Minefield, Cube Counter,
+Crusher Escalator, Stop the Clock, Type Racer Roulette, Log Dodge and Hex Drop.
 
-All six are **self-timed**: each browser plays the round on its own clock and
+Six are **self-timed**: each browser plays the round on its own clock and
 reports what happened, and the server replays the reports to decide the
 winner. Latency can't change who wins, and no shared-world netcode
-(prediction, interpolation) is needed. Hexa-Gone and Hidden Crossfire will
-need that layer once their rules are settled. See `src/server/games/registry.ts`.
+(prediction, interpolation) is needed.
+
+Hex Drop is played in one **shared world**: each browser moves its own runner,
+the server owns the tiles (when each one drops), and the other runners are
+drawn from positions shared 20 times a second. It runs on the same round
+runner. See `src/server/games/registry.ts`.
 
 ## Scripts
 

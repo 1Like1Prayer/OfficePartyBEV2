@@ -48,7 +48,12 @@ export const RoundState = schema(
         timingStartsAtMs: t.number().optional(),
         resultTimeoutMs: t.number().default(0),
         /** Latest progress per player (sessionId), reset every attempt. */
-        progress: t.map(ProgressState)
+        progress: t.map(ProgressState),
+        /**
+         * The attempt's shared world: server-owned values under the game's own
+         * keys (Hex Drop: when each tile falls). Reset every attempt.
+         */
+        shared: t.map('number')
     },
     'RoundState'
 );

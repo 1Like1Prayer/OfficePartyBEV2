@@ -15,7 +15,7 @@
  */
 
 import { SELF_TIMED } from '../../shared/constants.js';
-import type { AttemptTiming } from '../../shared/games/selfTimed.js';
+import type { AttemptTiming, SharedWorld } from '../../shared/games/selfTimed.js';
 import type { RoundDataPayload, RoundPhase } from '../../shared/protocol.js';
 import type { AnySelfTimedModule } from '../games/registry.js';
 import { done, refuse, succeed, type Outcome } from '../platform/outcome.js';
@@ -48,6 +48,8 @@ export class SelfTimedRound {
     private startAtMs: number | null = null;
     private readyDeadlineMs = 0;
     private cancelled = false;
+    /** The attempt's shared world (see SharedWorld): server-owned values every player sees. */
+    private readonly shared = new Map<string, number>();
 
     private readonly roster = new AttemptRoster();
     private readonly phaseTimer: TimerSlot;
@@ -67,10 +69,13 @@ export class SelfTimedRound {
                 if (this.phase === 'playing') this.resolve();
             }
         );
+        const { progressHz } = options.module;
         this.progress = new ProgressRelay(
             scheduler,
             (playerId, progress) => this.events.onProgress(playerId, progress),
-            (playerId) => this.phase === 'playing' && this.roster.has(playerId)
+            (playerId) => this.phase === 'playing' && this.roster.has(playerId),
+            // A little under the game's own interval, so the client's timer jitter isn't punished.
+            progressHz === undefined ? undefined : Math.floor((1000 / progressHz) * 0.8)
         );
     }
 
@@ -143,7 +148,7 @@ export class SelfTimedRound {
         if (this.module.handleAction === undefined) {
             return refuse('invalid_payload', 'This game has no actions.');
         }
-        const reply = this.module.handleAction(this.roundData, playerId, raw);
+        const reply = this.module.handleAction(this.roundData, playerId, raw, this.sharedWorld());
         return reply === null ? refuse('invalid_payload', 'Malformed action.') : succeed(reply);
     }
 
@@ -213,6 +218,20 @@ export class SelfTimedRound {
         };
     }
 
+    /** The shared world as a game's action sees it, timed from this attempt's start. */
+    private sharedWorld(): SharedWorld {
+        const startsAtMs = (this.startAtMs ?? this.scheduler.now()) + this.timing.countdownMs;
+        return {
+            raceMs: this.scheduler.now() - startsAtMs,
+            get: (key) => this.shared.get(key),
+            set: (key, value) => {
+                if (this.shared.get(key) === value) return;
+                this.shared.set(key, value);
+                this.events.onSharedChanged(Object.fromEntries(this.shared));
+            }
+        };
+    }
+
     /* ------------------------------- lifecycle ------------------------------ */
 
     private startAttempt(
@@ -239,6 +258,10 @@ export class SelfTimedRound {
         this.progress.reset();
         this.closing.reset();
         this.startAtMs = null;
+        if (this.shared.size > 0) {
+            this.shared.clear();
+            this.events.onSharedChanged({});
+        }
 
         // Loading: the round data goes out and clients build what they need.
         this.phase = 'loading';
