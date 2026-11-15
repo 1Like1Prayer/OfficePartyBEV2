@@ -115,13 +115,36 @@ export class SelfTimedRound {
 
     /* ---------------------------- client actions ---------------------------- */
 
-    markReady(playerId: string, attempt: number): Outcome {
+    /**
+     * Ready, or (`ready` false) taking it back. A player can change their mind
+     * until the lead before the start runs out: taking it back while the start
+     * is scheduled calls the start off, and the ready check runs again.
+     */
+    markReady(playerId: string, attempt: number, ready = true): Outcome {
+        if (!ready) return this.markUnready(playerId, attempt);
         const refused = this.guard(playerId, attempt, 'ready-check');
         if (refused) return refused;
         if (!this.roster.markReady(playerId)) return done;
 
         this.events.onLifecycleChanged();
         if (this.roster.allReady()) this.scheduleStart();
+        return done;
+    }
+
+    private markUnready(playerId: string, attempt: number): Outcome {
+        const refused =
+            this.phase === 'starting' ? this.guard(playerId, attempt, 'starting') : this.guard(playerId, attempt, 'ready-check');
+        if (refused) return refused;
+        if (!this.roster.markUnready(playerId)) return done;
+
+        if (this.phase === 'starting') {
+            // The start is off. Whoever backed out gets a moment to come back before the ready check gives up on them.
+            this.phase = 'ready-check';
+            this.startAtMs = null;
+            this.readyDeadlineMs = Math.max(this.readyDeadlineMs, this.scheduler.now() + SELF_TIMED.UNREADY_GRACE_MS);
+            this.phaseTimer.set(this.readyDeadlineMs - this.scheduler.now(), () => this.onReadyCheckTimeout());
+        }
+        this.events.onLifecycleChanged();
         return done;
     }
 

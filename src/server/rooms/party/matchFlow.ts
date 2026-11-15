@@ -117,8 +117,8 @@ export class MatchFlow {
 
     /* ----------------------- round actions, by roundId ----------------------- */
 
-    markReady(playerId: string, roundId: number, attempt: number): Outcome {
-        return this.withRound(roundId, (round) => round.markReady(playerId, attempt));
+    markReady(playerId: string, roundId: number, attempt: number, ready = true): Outcome {
+        return this.withRound(roundId, (round) => round.markReady(playerId, attempt, ready));
     }
 
     submitResult(playerId: string, roundId: number, attempt: number, result: unknown): Outcome {

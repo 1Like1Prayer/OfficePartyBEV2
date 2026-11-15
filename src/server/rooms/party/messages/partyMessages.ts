@@ -30,7 +30,7 @@ import {
     setNameRequest,
     setReadyRequest,
     submitResultRequest,
-    roundEnvelope
+    readyForRoundRequest
 } from './validators.js';
 
 /**
@@ -86,8 +86,8 @@ export const partyMessages = {
         return reply(ctx, this.kickPlayer(client.sessionId, message.playerId));
     }),
 
-    [ClientRequest.ReadyForRound]: validate(roundEnvelope, function (this: PartyHandlerScope, client, message, ctx) {
-        return reply(ctx, this.match.markReady(client.sessionId, message.roundId, message.attempt));
+    [ClientRequest.ReadyForRound]: validate(readyForRoundRequest, function (this: PartyHandlerScope, client, message, ctx) {
+        return reply(ctx, this.match.markReady(client.sessionId, message.roundId, message.attempt, message.ready ?? true));
     }),
 
     [ClientRequest.SubmitResult]: validate(submitResultRequest, function (this: PartyHandlerScope, client, message, ctx) {

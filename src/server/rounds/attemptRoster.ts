@@ -41,6 +41,11 @@ export class AttemptRoster {
         return true;
     }
 
+    /** Takes back their ready. Returns false if they were not ready. */
+    markUnready(playerId: string): boolean {
+        return this.ready.delete(playerId);
+    }
+
     readyList(): string[] {
         return this.list().filter((id) => this.ready.has(id));
     }
