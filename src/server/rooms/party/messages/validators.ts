@@ -42,6 +42,9 @@ export const roundEnvelope = z.object({
     attempt: z.number().int().nonnegative()
 });
 
+/** `ready` false takes a ready back; left out, it means ready, as it always has. */
+export const readyForRoundRequest = roundEnvelope.extend({ ready: z.boolean().optional() });
+
 export const submitResultRequest = roundEnvelope.extend({ result: z.unknown() });
 
 export const roundActionRequest = roundEnvelope.extend({ action: z.unknown() });

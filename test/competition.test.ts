@@ -7,12 +7,13 @@ import { hmacRollFace } from '../src/server/games/diceRolls.js';
 import { playableGameIds, roundsForGame } from '../src/server/games/registry.js';
 
 describe('playlists', () => {
-    it('all seven built games are playable', () => {
+    it('all eight built games are playable', () => {
         assert.deepEqual(playableGameIds().sort(), [
             'crusher-escalator',
             'cube-counter',
             'hex-drop',
             'log-dodge',
+            'mage-battle',
             'minefield',
             'stop-the-clock',
             'type-racer-roulette'
@@ -31,7 +32,6 @@ describe('playlists', () => {
             playlist: ['log-dodge', 'minefield']
         });
         assert.equal(buildCustomPlaylist(['log-dodge', 'log-dodge']).ok, false);
-        assert.equal(buildCustomPlaylist(['mage-battle']).ok, false);
         assert.equal(buildCustomPlaylist([]).ok, false);
     });
 });

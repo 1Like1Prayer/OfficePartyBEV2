@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { COMPETITION } from '../src/shared/constants.js';
+import { MAGE_BATTLE } from '../src/shared/games/mageBattle/constants.js';
 import type { StopTheClockRound } from '../src/shared/games/stopTheClock.js';
 import {
     ServerMessage,
@@ -198,5 +199,23 @@ describe('competition', () => {
         playStopTheClockRound(party, 'host');
         party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
         assert.equal(party.state.round.progress.size, 0);
+    });
+
+    it('the next round starts with an empty shared world, not the last round\'s', () => {
+        const party = createPartyHarness(['host', 'guest']);
+        party.lobby.setMode('host', 'custom', ['mage-battle']);
+        party.readyUp();
+        assert.equal(party.match.start('host').ok, true);
+        party.playToTiming();
+        const first = { roundId: party.state.round.roundId, attempt: party.state.round.attempt };
+        party.clock.advance(1_000);
+        const reply = party.match.handleAction('host', first.roundId, first.attempt, { type: 'press', atMs: 1_000 });
+        assert.equal(reply.ok, true, JSON.stringify(reply));
+        assert.ok(party.state.round.shared.size > 0, 'the press is in the shared world');
+
+        for (const id of ['host', 'guest']) party.match.submitResult(id, first.roundId, first.attempt, {});
+        party.clock.advance(MAGE_BATTLE.FINISH_ANIMATION_MS + COMPETITION.RESULT_DISPLAY_MS);
+        assert.notEqual(party.state.round.roundId, first.roundId, 'on to the next round');
+        assert.equal(party.state.round.shared.size, 0);
     });
 });
