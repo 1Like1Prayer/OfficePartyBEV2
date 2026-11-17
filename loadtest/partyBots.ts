@@ -298,10 +298,14 @@ class Bot {
                 paragraphs.forEach((lines, p) => {
                     if (p > 0) at += TYPE_RACER.PARAGRAPH_PAUSE_MS;
                     for (const line of lines) {
-                        at += line.length * msPerChar * rand(0.8, 1.2);
-                        chars += line.length;
+                        // Key by key for the progress others see; the server only needs the line's end.
+                        const perChar = msPerChar * rand(0.8, 1.2);
+                        for (let key = 0; key < line.length; key++) {
+                            at += perChar;
+                            chars += 1;
+                            charsAt.push({ atMs: at, chars, paragraph: p });
+                        }
                         events.push({ kind: 'line', atMs: Math.round(at) });
-                        charsAt.push({ atMs: at, chars, paragraph: p });
                     }
                 });
                 return {

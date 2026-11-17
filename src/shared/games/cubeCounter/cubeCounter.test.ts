@@ -137,11 +137,12 @@ test('hard puzzles really do contain big boxes and stacks', () => {
     assert.ok(sawBigBox && sawStack);
 });
 
-test('Cube Counter is two scoring rounds of 8 puzzles each', () => {
-    assert.equal(cubeCounterModule.roundsPerGame, 2);
+test('Cube Counter is one scoring round of 8 puzzles', () => {
+    assert.equal(cubeCounterModule.roundsPerGame, 1);
     assert.equal(CUBE_COUNTER.PUZZLES_PER_ROUND, 8);
-    for (const roundInGame of [1, 2]) {
-        const round = cubeCounterModule.createRoundData({ roundInGame, roundsPerGame: 2, playerIds: [], attempt: 0 });
+    assert.equal(CUBE_COUNTER.PAUSE_BETWEEN_PUZZLES_MS, CUBE_COUNTER.REVEAL_MS + CUBE_COUNTER.NEXT_PUZZLE_MS);
+    {
+        const round = cubeCounterModule.createRoundData({ roundInGame: 1, roundsPerGame: 1, playerIds: [], attempt: 0 });
         assert.equal(round.puzzles.length, 8);
     }
 });

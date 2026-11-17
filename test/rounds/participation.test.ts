@@ -9,7 +9,7 @@ import { SELF_TIMED } from '../../src/shared/constants.js';
 import { crusherEscalatorModule } from '../../src/shared/games/crusherEscalator/module.js';
 import { LOG_DODGE } from '../../src/shared/games/logDodge/constants.js';
 import { logDodgeModule } from '../../src/shared/games/logDodge/module.js';
-import { stopTheClockModule } from '../../src/shared/games/stopTheClock.js';
+import { oneTargetStopTheClock } from '../support/oneTarget.js';
 import { TYPE_RACER } from '../../src/shared/games/typeRacer/constants.js';
 import { totalCharacters } from '../../src/shared/games/typeRacer/progress.js';
 import { getSelfTimedModule } from '../../src/server/games/registry.js';
@@ -81,7 +81,7 @@ describe('early closing', () => {
     });
 
     it('games that do not end early never send a closing notice', () => {
-        const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b', 'c']);
+        const h = createRoundHarness(oneTargetStopTheClock, 'stop-the-clock', ['a', 'b', 'c']);
         h.playAttempt();
         h.round.submitResult('a', 0, { elapsedMs: 1000, timingSuspect: false });
         h.round.submitResult('b', 0, { elapsedMs: 1000, timingSuspect: false });

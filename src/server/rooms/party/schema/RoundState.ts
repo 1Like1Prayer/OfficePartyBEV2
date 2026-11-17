@@ -39,8 +39,6 @@ export const RoundState = schema(
         /** The ready check is visible so everyone can see who the room waits on. */
         ready: t.array('string'),
         waitingFor: t.array('string'),
-        /** When the ready check gives up. Zero outside a ready check. */
-        readyDeadlineMs: t.number().default(0),
         /** When the countdown begins, once the start is scheduled. */
         startAtMs: t.number().optional(),
         countdownMs: t.number().default(0),

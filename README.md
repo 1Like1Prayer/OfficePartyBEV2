@@ -29,6 +29,7 @@ you're out. The last mage standing wins, or the highest score after 60 seconds.
 | `npm run typecheck` | Strict type check of src, tests and loadtest |
 | `npm run build` | Compile to `build/` |
 | `npm run loadtest -- --roomId ABCD --numClients 11` | Bots join a room, sync clocks, press ready |
+| `npm run bots -- --room ABCD --count 11` | Bots join a room and play every game (see below) |
 
 ## File tree
 
@@ -53,8 +54,31 @@ src/
       schema/                  Synced state (players, lobby, round, progress)
       messages/                Zod validators and the request handlers
 test/                          Runner, match flow and real-server tests (+ support/)
-loadtest/                      @colyseus/loadtest script
+loadtest/                      partyRoom.ts (@colyseus/loadtest), partyBots.ts (playing bots)
 ```
+
+## Playing with bots
+
+To try a full room by yourself:
+
+1. Run the server (`npm start`) and the web app (`npm run dev` in the client repo).
+2. Host a room at http://localhost:5173 and note its 4-letter code.
+3. Fill the room with bots:
+
+   ```sh
+   npm run bots -- --room ABCD --count 11
+   ```
+
+The bots join, ready up one by one and play every game, some well and some
+badly, sending the same live progress and results a real player does.
+Ctrl+C stops them.
+
+| Option | Default | What it does |
+|---|---|---|
+| `--room CODE` | (required) | Room to join |
+| `--count N` | `11` | How many bots join |
+| `--endpoint URL` | `http://localhost:2567` | Game server to connect to |
+| `--flaky` | off | Some bots drop their connection mid-round and come back |
 
 ## Client contract
 

@@ -14,7 +14,8 @@
     "clean": "rimraf build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test --test-timeout=30000 \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
-    "loadtest": "tsx loadtest/partyRoom.ts --room party"
+    "loadtest": "tsx loadtest/partyRoom.ts --room party",
+    "bots": "tsx loadtest/partyBots.ts"
   },
   "author": "",
   "license": "UNLICENSED",

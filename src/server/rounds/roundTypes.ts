@@ -63,8 +63,6 @@ export interface RoundDescription {
     participants: string[];
     ready: string[];
     waitingFor: string[];
-    /** Room-timeline time the ready check gives up. Zero outside a ready check. */
-    readyDeadlineMs: number;
     /** Room-timeline time the countdown begins, once scheduled. */
     startAtMs: number | null;
     countdownMs: number;

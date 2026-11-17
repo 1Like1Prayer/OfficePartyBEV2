@@ -36,7 +36,7 @@ const LOBBY_KEYS: KeyList<LobbyStateJson> = {
 const ROUND_KEYS: KeyList<RoundStateJson> = {
     phase: true, roundId: true, attempt: true, gameId: true, gameIndex: true,
     totalGames: true, roundInGame: true, roundsPerGame: true, isTiebreak: true,
-    participants: true, ready: true, waitingFor: true, readyDeadlineMs: true,
+    participants: true, ready: true, waitingFor: true,
     startAtMs: true, countdownMs: true, timingStartsAtMs: true, resultTimeoutMs: true,
     progress: true, shared: true
 };

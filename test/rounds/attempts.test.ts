@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { SELF_TIMED } from '../../src/shared/constants.js';
 import type { AttemptTiming, RankedEntry, RoundContext } from '../../src/shared/games/selfTimed.js';
-import { stopTheClockModule, type StopTheClockRound } from '../../src/shared/games/stopTheClock.js';
+import { type StopTheClockRound } from '../../src/shared/games/stopTheClock.js';
+import { oneTargetStopTheClock } from '../support/oneTarget.js';
 import type { AnySelfTimedModule } from '../../src/server/games/registry.js';
 import { decideAttemptOutcome } from '../../src/server/rounds/attemptOutcome.js';
 import { createRoundHarness, type RoundHarness } from '../support/roundHarness.js';
@@ -22,7 +23,7 @@ const reportExactly = (h: RoundHarness, players: readonly string[]) => {
 
 describe('tiebreakers', () => {
     it('an exact tie runs a fresh attempt among just the tied players', () => {
-        const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b', 'c']);
+        const h = createRoundHarness(oneTargetStopTheClock, 'stop-the-clock', ['a', 'b', 'c']);
         h.playAttempt();
         reportExactly(h, ['a', 'b']);
         h.round.submitResult('c', 0, { elapsedMs: 0, timingSuspect: false });
@@ -37,7 +38,7 @@ describe('tiebreakers', () => {
     });
 
     it('after the last tiebreaker a surviving tie is drawn, and says so', () => {
-        const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b']);
+        const h = createRoundHarness(oneTargetStopTheClock, 'stop-the-clock', ['a', 'b']);
         for (let attempt = 0; attempt < SELF_TIMED.MAX_TIEBREAK_ATTEMPTS; attempt++) {
             if (attempt > 0) h.clock.advance(SELF_TIMED.TIEBREAK_DELAY_MS);
             h.playAttempt();
@@ -72,9 +73,9 @@ describe('stages', () => {
      * on to a final with a shorter run-up.
      */
     const staged: AnySelfTimedModule = {
-        ...stopTheClockModule,
+        ...oneTargetStopTheClock,
         createRoundData: (context: RoundContext) => ({
-            ...stopTheClockModule.createRoundData(context),
+            ...oneTargetStopTheClock.createRoundData(context),
             heat: context.attempt === 0
         }),
         openingTiming: () => OPENING,
