@@ -215,7 +215,9 @@ describe('competition', () => {
 
         for (const id of ['host', 'guest']) party.match.submitResult(id, first.roundId, first.attempt, {});
         party.clock.advance(MAGE_BATTLE.FINISH_ANIMATION_MS + COMPETITION.RESULT_DISPLAY_MS);
-        assert.notEqual(party.state.round.roundId, first.roundId, 'on to the next round');
+        // A press that missed leaves it 0-0, and a tiebreaker comes first: that must start empty too.
+        const { roundId, attempt } = party.state.round;
+        assert.ok(roundId !== first.roundId || attempt !== first.attempt, 'on to the next attempt');
         assert.equal(party.state.round.shared.size, 0);
     });
 });

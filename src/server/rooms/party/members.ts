@@ -4,7 +4,9 @@
  * - The room's creator owns it. Owner is a permissions role (pick games,
  *   press start, skip results); the owner doesn't run anything.
  * - When the owner drops or leaves, ownership moves to whoever has been
- *   connected longest. The match keeps running.
+ *   connected longest. The match keeps running. If the room's creator
+ *   dropped (a page refresh, a blip in the wifi) and comes back while their
+ *   slot is held, they are given the room back.
  * - The owner may remove (kick) anyone else, in any phase.
  * - Joining during the lobby is free; once a competition is running,
  *   newcomers watch until the room is back in the lobby.
@@ -22,6 +24,8 @@ export interface JoinProfile {
 
 export class Members {
     private joinCounter = 0;
+    /** Who opened the room, while they still hold a slot in it. */
+    private creatorId: string | null = null;
 
     constructor(private readonly ctx: PartyContext) {}
 
@@ -53,6 +57,7 @@ export class Members {
             joinOrder: ++this.joinCounter
         });
         players.set(playerId, player);
+        if (this.ctx.state.ownerId === '' && this.creatorId === null && players.size === 1) this.creatorId = playerId;
         if (this.ctx.state.ownerId === '') this.claimOwnership(playerId);
         return player;
     }
@@ -69,11 +74,19 @@ export class Members {
         const player = this.get(playerId);
         if (!player) return;
         player.connected = true;
-        if (this.ctx.state.ownerId === '') this.claimOwnership(playerId);
+        if (this.ctx.state.ownerId === '') {
+            this.claimOwnership(playerId);
+        } else if (playerId === this.creatorId && !this.isOwner(playerId)) {
+            // The creator is back: the room is theirs again. The stand-in keeps whatever ready they had.
+            const standIn = this.get(this.ctx.state.ownerId);
+            if (standIn) standIn.isOwner = false;
+            this.claimOwnership(playerId);
+        }
     }
 
     remove(playerId: string): void {
         if (!this.ctx.state.players.delete(playerId)) return;
+        if (playerId === this.creatorId) this.creatorId = null;
         if (this.isOwner(playerId)) this.transferOwnership();
     }
 

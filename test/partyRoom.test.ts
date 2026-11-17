@@ -142,6 +142,24 @@ describe('party room', () => {
         assert.equal(second.state.players.get(host.sessionId)?.connected, false);
     });
 
+    it('the creator gets the room back when they reconnect, e.g. after a page refresh', async () => {
+        const { room, host } = await createParty();
+        const second = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Second' });
+        const { sessionId, reconnectionToken } = host;
+
+        host.reconnection.enabled = false; // reconnect by hand, below
+        await host.leave(false);
+        await second.waitForNextPatch();
+        assert.equal(second.state.ownerId, second.sessionId, 'a stand-in holds the room meanwhile');
+
+        const back = await colyseus.sdk.reconnect(reconnectionToken);
+        assert.equal(back.sessionId, sessionId);
+        await second.waitForNextPatch();
+        assert.equal(second.state.ownerId, sessionId);
+        assert.equal(second.state.players.get(second.sessionId)?.isOwner, false);
+        assert.equal(second.state.players.get(sessionId)?.isOwner, true);
+    });
+
     it('a dropped player reconnects into the same slot with the same id', async () => {
         const { room, host } = await createParty();
         const guest = await colyseus.sdk.joinById(room.roomId, { ...join, name: 'Bo' });

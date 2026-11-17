@@ -202,6 +202,11 @@ test('falling out at the same moment is a tie', () => {
     assert.deepEqual(ranked.map(({ rank }) => rank), [1, 1]);
 });
 
+test('two still up when the clock runs out are level, and go to a tiebreaker', () => {
+    const ranked = hexDropModule.rank([entry('z', null), entry('a', null), entry('m', 3_000)], { spawns: {} });
+    assert.deepEqual(ranked.map(({ playerId, rank }) => [playerId, rank]), [['a', 1], ['z', 1], ['m', 3]]);
+});
+
 test('once all but one have fallen out, the last one is told to stop', () => {
     const close = (reported: ReturnType<typeof entry>[], count: number) =>
         hexDropModule.shouldCloseEarly!(reported, count, { spawns: {} });
