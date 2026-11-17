@@ -86,18 +86,18 @@ describe('self-timed round lifecycle', () => {
         assert.equal(h.round.describe().startAtMs, h.clock.now() + SELF_TIMED.START_LEAD_MS);
     });
 
-    it('someone who backs out late still gets a grace period before the ready check gives up on them', () => {
+    it('someone who backs out is waited for again, however long they take', () => {
         const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b']);
         h.round.markReady('a', 0);
-        h.clock.advance(SELF_TIMED.READY_CHECK_TIMEOUT_MS - 500);
         h.round.markReady('b', 0);
         h.round.markReady('b', 0, false);
 
-        h.clock.advance(SELF_TIMED.UNREADY_GRACE_MS - 1);
+        h.clock.advance(10 * 60_000);
         assert.equal(h.round.describe().phase, 'ready-check');
-        h.clock.advance(1);
+        assert.equal(h.clock.pendingCount, 0);
+        h.round.markReady('b', 0);
         assert.equal(h.round.describe().phase, 'starting');
-        assert.deepEqual(h.round.describe().participants, ['a']);
+        assert.deepEqual(h.round.describe().participants, ['a', 'b']);
     });
 
     it('a ready can no longer be taken back once the countdown is under way', () => {
@@ -110,12 +110,20 @@ describe('self-timed round lifecycle', () => {
         assert.equal(h.round.describe().phase, 'countdown');
     });
 
-        it('a ready-check timeout starts without the stragglers', () => {
+    it('the ready check has no time limit: nothing starts until everyone is ready', () => {
         const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b']);
         h.round.markReady('a', 0);
-        h.clock.advance(SELF_TIMED.READY_CHECK_TIMEOUT_MS);
+        h.clock.advance(60 * 60_000);
+        assert.equal(h.round.describe().phase, 'ready-check');
+        assert.equal(h.round.describe().startAtMs, null);
+        assert.deepEqual(h.round.describe().waitingFor, ['b']);
+    });
+
+    it('a straggler who leaves stops being waited on, and the rest start', () => {
+        const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b']);
+        h.round.markReady('a', 0);
+        h.round.dropParticipant('b');
         assert.equal(h.round.describe().phase, 'starting');
-        assert.deepEqual(h.round.describe().participants, ['a']);
     });
 
     it('resolves at the timeout with whatever arrived; no-shows score nothing', () => {
@@ -164,7 +172,7 @@ describe('self-timed round lifecycle', () => {
         const h = createRoundHarness(stopTheClockModule, 'stop-the-clock', ['a', 'b']);
         h.round.cancel();
         assert.equal(h.clock.pendingCount, 0);
-        h.clock.advance(SELF_TIMED.READY_CHECK_TIMEOUT_MS * 2);
+        h.clock.advance(60 * 60_000);
         assert.equal(h.resolved.length, 0);
     });
 });

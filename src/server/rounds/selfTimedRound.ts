@@ -1,8 +1,9 @@
 /**
  * The self-timed round runner, shared by every built game.
  *
- * The server hands out the round data, waits for everyone to be ready, picks
- * a start a few seconds out, and collects what comes back:
+ * The server hands out the round data, waits for everyone to be ready (for as
+ * long as it takes: nothing starts until they are, or the ones who aren't
+ * leave), picks a start a few seconds out, and collects what comes back:
  *
  *   loading -> ready-check -> starting -> countdown -> playing -> results
  *
@@ -46,7 +47,6 @@ export class SelfTimedRound {
     private timing: AttemptTiming = DEFAULT_TIMING;
     private roundData: unknown = null;
     private startAtMs: number | null = null;
-    private readyDeadlineMs = 0;
     private cancelled = false;
     /** The attempt's shared world (see SharedWorld): server-owned values every player sees. */
     private readonly shared = new Map<string, number>();
@@ -138,11 +138,10 @@ export class SelfTimedRound {
         if (!this.roster.markUnready(playerId)) return done;
 
         if (this.phase === 'starting') {
-            // The start is off. Whoever backed out gets a moment to come back before the ready check gives up on them.
+            // The start is off, and the ready check waits for them again, however long that takes.
             this.phase = 'ready-check';
             this.startAtMs = null;
-            this.readyDeadlineMs = Math.max(this.readyDeadlineMs, this.scheduler.now() + SELF_TIMED.UNREADY_GRACE_MS);
-            this.phaseTimer.set(this.readyDeadlineMs - this.scheduler.now(), () => this.onReadyCheckTimeout());
+            this.phaseTimer.clear();
         }
         this.events.onLifecycleChanged();
         return done;
@@ -220,7 +219,6 @@ export class SelfTimedRound {
             participants: this.roster.list(),
             ready: this.roster.readyList(),
             waitingFor: this.roster.waitingFor(),
-            readyDeadlineMs: this.phase === 'ready-check' ? this.readyDeadlineMs : 0,
             startAtMs: this.startAtMs,
             countdownMs: this.timing.countdownMs,
             timingStartsAtMs:
@@ -298,22 +296,13 @@ export class SelfTimedRound {
         this.phase = 'loading';
         this.events.onRoundData(this.roundDataPayload()!);
 
-        // Ready check: nothing is scheduled until everyone has acknowledged.
+        // Ready check: nothing is scheduled until everyone has acknowledged. It
+        // has no time limit; leaving the room is what takes someone out of it.
         this.phase = 'ready-check';
-        this.readyDeadlineMs = this.scheduler.now() + SELF_TIMED.READY_CHECK_TIMEOUT_MS;
-        this.phaseTimer.set(SELF_TIMED.READY_CHECK_TIMEOUT_MS, () => this.onReadyCheckTimeout());
         this.events.onLifecycleChanged();
 
         // An empty attempt (everyone left) resolves rather than hanging.
         if (this.roster.size === 0) this.resolve();
-    }
-
-    /** Someone never acknowledged: start without them rather than hang the room. */
-    private onReadyCheckTimeout(): void {
-        if (this.phase !== 'ready-check') return;
-        this.roster.removeUnready();
-        if (this.roster.size === 0) this.resolve();
-        else this.scheduleStart();
     }
 
     private scheduleStart(): void {

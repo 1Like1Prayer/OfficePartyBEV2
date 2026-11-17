@@ -26,7 +26,6 @@ export const writeRoundDescription = (round: RoundState, view: RoundDescription)
     replaceArray(round.participants, view.participants);
     replaceArray(round.ready, view.ready);
     replaceArray(round.waitingFor, view.waitingFor);
-    round.readyDeadlineMs = view.readyDeadlineMs;
     round.startAtMs = view.startAtMs ?? undefined;
     round.countdownMs = view.countdownMs;
     round.timingStartsAtMs = view.timingStartsAtMs ?? undefined;
@@ -72,7 +71,6 @@ export const resetRound = (round: RoundState): void => {
     replaceArray(round.participants, []);
     replaceArray(round.ready, []);
     replaceArray(round.waitingFor, []);
-    round.readyDeadlineMs = 0;
     round.startAtMs = undefined;
     round.countdownMs = 0;
     round.timingStartsAtMs = undefined;

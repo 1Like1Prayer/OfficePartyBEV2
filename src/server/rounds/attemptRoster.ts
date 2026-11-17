@@ -58,11 +58,6 @@ export class AttemptRoster {
         return this.size > 0 && this.waitingFor().length === 0;
     }
 
-    /** The ready check timed out: whoever never acknowledged sits this attempt out. */
-    removeUnready(): void {
-        for (const playerId of this.waitingFor()) this.participants.delete(playerId);
-    }
-
     /* -------------------------------- results ------------------------------- */
 
     hasResult(playerId: string): boolean {
