@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { COMPETITION } from '../src/shared/constants.js';
 import { MAGE_BATTLE } from '../src/shared/games/mageBattle/constants.js';
-import type { StopTheClockRound } from '../src/shared/games/stopTheClock.js';
+import { STOP_THE_CLOCK, type StopTheClockRound } from '../src/shared/games/stopTheClock.js';
 import {
     ServerMessage,
     type LeaderboardPayload,
@@ -16,20 +16,33 @@ import {
 } from '../src/shared/protocol.js';
 import { createPartyHarness } from './support/partyHarness.js';
 
-/** Play one Stop the Clock round in which `winner` is exact and everyone else is way off. */
-const playStopTheClockRound = (party: ReturnType<typeof createPartyHarness>, winner: string) => {
+type Party = ReturnType<typeof createPartyHarness>;
+
+/**
+ * Play one Stop the Clock target: `winner` is exact and everyone else is off
+ * by `othersOffMs` (by default way off, stopping at zero).
+ */
+const playStopTheClockTarget = (party: Party, winner: string, othersOffMs?: number) => {
     party.playToTiming();
     const { roundId, attempt, participants } = party.state.round;
     const data = party.messages<RoundDataPayload<StopTheClockRound>>(ServerMessage.RoundData).at(-1)!;
     for (const id of participants) {
-        const elapsedMs = id === winner ? data.data.targetMs : 0;
+        const elapsedMs = id === winner ? data.data.targetMs : othersOffMs === undefined ? 0 : data.data.targetMs + othersOffMs;
         party.match.submitResult(id, roundId, attempt, { elapsedMs, timingSuspect: false });
     }
 };
 
-const startStopTheClock = (players = ['host', 'guest']) => {
+/** A whole Stop the Clock round: one target per entry, with the scores break between them. */
+const playStopTheClockGame = (party: Party, targets: readonly (readonly [winner: string, othersOffMs?: number])[]) => {
+    targets.forEach(([winner, othersOffMs], index) => {
+        playStopTheClockTarget(party, winner, othersOffMs);
+        if (index < targets.length - 1) party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
+    });
+};
+
+const startStopTheClock = (players = ['host', 'guest'], playlist = ['stop-the-clock']) => {
     const party = createPartyHarness(players);
-    party.lobby.setMode('host', 'custom', ['stop-the-clock']);
+    party.lobby.setMode('host', 'custom', playlist as Parameters<typeof party.lobby.setMode>[2]);
     party.readyUp();
     assert.equal(party.match.start('host').ok, true);
     return party;
@@ -71,27 +84,34 @@ describe('lobby rules', () => {
 });
 
 describe('competition', () => {
-    it('plays every round, one point each, then shows the leaderboard and returns to the lobby', () => {
+    it('plays the four targets as one round, most targets won takes the point, then the leaderboard and the lobby', () => {
         const party = startStopTheClock();
         assert.equal(party.state.phase, 'competition');
-        assert.equal(party.state.totalRounds, 4);
+        assert.equal(party.state.totalRounds, 1);
 
-        for (let round = 1; round <= 4; round++) {
-            assert.equal(party.state.round.roundInGame, round);
-            playStopTheClockRound(party, round === 4 ? 'guest' : 'host');
+        const winners = ['host', 'host', 'host', 'guest'];
+        winners.forEach((winner, target) => {
+            playStopTheClockTarget(party, winner);
             const results = party.messages<RoundResultsPayload>(ServerMessage.RoundResults).at(-1)!;
-            assert.equal(results.isFinal, true);
-            assert.ok(results.nextRoundAtServerMs !== null);
-            party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
-        }
+            const isLast = target === winners.length - 1;
+            assert.equal(results.isFinal, isLast);
+            assert.equal(results.advancing === null, isLast, 'every target but the last goes on to the next');
+            if (!isLast) {
+                party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
+                assert.equal(party.state.round.roundInGame, 1, 'still the same scoring round');
+            }
+        });
+        const final = party.messages<RoundResultsPayload>(ServerMessage.RoundResults).at(-1)!;
+        assert.equal(final.winnerId, 'host');
+        assert.deepEqual(final.ranked.map((row) => [row.playerId, row.detail['wins']]), [['host', 3], ['guest', 1]]);
+        party.clock.advance(STOP_THE_CLOCK.FINISH_ANIMATION_MS + COMPETITION.RESULT_DISPLAY_MS);
 
         assert.equal(party.state.phase, 'leaderboard');
         const board = party.messages<LeaderboardPayload>(ServerMessage.Leaderboard)[0]!;
         assert.deepEqual(board.rows.map((row) => [row.playerId, row.points, row.rank]), [
-            ['host', 3, 1],
-            ['guest', 1, 2]
+            ['host', 1, 1],
+            ['guest', 0, 2]
         ]);
-        assert.equal(party.state.players.get('host')?.points, 3);
 
         party.clock.advance(COMPETITION.LEADERBOARD_DISPLAY_MS);
         assert.equal(party.state.phase, 'lobby');
@@ -100,35 +120,64 @@ describe('competition', () => {
         assert.equal(party.state.players.get('host')?.points, 0);
     });
 
-    it('a message for a finished round is refused as stale', () => {
+    it('level on targets won, the lower total takes the round', () => {
+        const party = startStopTheClock();
+        // Two targets each; the host loses theirs by far more than the guest does.
+        playStopTheClockGame(party, [['host', 100], ['host', 100], ['guest', 300], ['guest', 300]]);
+        const final = party.messages<RoundResultsPayload>(ServerMessage.RoundResults).at(-1)!;
+        assert.equal(final.winnerId, 'guest');
+        assert.deepEqual(final.ranked.map((row) => [row.playerId, row.detail['wins'], row.detail['totalErrorMs']]), [
+            ['guest', 2, 200],
+            ['host', 2, 600]
+        ]);
+    });
+
+    it('missing a target costs a big penalty, but not the targets already won', () => {
+        const party = startStopTheClock();
+        playStopTheClockGame(party, [['host', 100], ['host', 100], ['host', 100]]);
+        // The last target: only the guest stops, and wins it; the host never does.
+        party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
+        party.playToTiming();
+        const { roundId, attempt } = party.state.round;
+        const data = party.messages<RoundDataPayload<StopTheClockRound>>(ServerMessage.RoundData).at(-1)!;
+        party.match.submitResult('guest', roundId, attempt, { elapsedMs: data.data.targetMs, timingSuspect: false });
+        party.clock.advance(data.data.targetMs + STOP_THE_CLOCK.RESULT_GRACE_MS);
+
+        const final = party.messages<RoundResultsPayload>(ServerMessage.RoundResults).at(-1)!;
+        assert.equal(final.winnerId, 'host', 'three targets won beats one');
+        const host = final.ranked.find((row) => row.playerId === 'host')!;
+        assert.equal(host.reported, false);
+        assert.equal(host.detail['totalErrorMs'], STOP_THE_CLOCK.MISSED_TARGET_MS);
+        assert.deepEqual(final.noShow, [], 'ranked, so not listed again as a no-show');
+    });
+
+    it('a message for a finished attempt is refused as stale', () => {
         const party = startStopTheClock();
         const firstRoundId = party.state.round.roundId;
-        playStopTheClockRound(party, 'host');
-        party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
+        playStopTheClockTarget(party, 'host');
+        party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
 
         const stale = party.match.markReady('host', firstRoundId, 0);
         assert.equal(!stale.ok && stale.error.code, 'stale_round');
     });
 
     it('only the owner can skip the results screen', () => {
-        const party = startStopTheClock();
-        playStopTheClockRound(party, 'host');
+        const party = startStopTheClock(['host', 'guest'], ['stop-the-clock', 'log-dodge']);
+        playStopTheClockGame(party, [['host'], ['host'], ['host'], ['host']]);
+        party.clock.advance(STOP_THE_CLOCK.FINISH_ANIMATION_MS);
         const refused = party.match.skipResults('guest');
         assert.equal(!refused.ok && refused.error.code, 'not_owner');
 
         assert.equal(party.match.skipResults('host').ok, true);
-        assert.equal(party.state.round.roundInGame, 2);
+        assert.equal(party.state.round.gameId, 'log-dodge');
         assert.equal(party.state.round.phase, 'ready-check');
     });
 
     it('the owner can skip to the next game mid-round; the unfinished round scores nothing', () => {
-        const party = createPartyHarness(['host', 'guest']);
-        party.lobby.setMode('host', 'custom', ['stop-the-clock', 'log-dodge']);
-        party.readyUp();
-        party.match.start('host');
-        playStopTheClockRound(party, 'host');
-        party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
-        party.playToTiming(); // round 2 is in progress
+        const party = startStopTheClock(['host', 'guest'], ['stop-the-clock', 'log-dodge']);
+        playStopTheClockTarget(party, 'host');
+        party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
+        party.playToTiming(); // the second target is in progress
 
         const refused = party.match.skipGame('guest');
         assert.equal(!refused.ok && refused.error.code, 'not_owner');
@@ -138,7 +187,7 @@ describe('competition', () => {
         assert.equal(party.state.round.gameId, 'log-dodge');
         assert.equal(party.state.round.roundInGame, 1);
         assert.ok(party.state.round.roundId > roundBefore);
-        assert.equal(party.state.players.get('host')?.points, 1, 'points so far are kept');
+        assert.equal(party.state.players.get('host')?.points, 0, 'a target won is not the round won');
 
         const stale = party.match.markReady('host', roundBefore, 0);
         assert.equal(!stale.ok && stale.error.code, 'stale_round');
@@ -196,8 +245,8 @@ describe('competition', () => {
         party.match.submitProgress('host', roundId, attempt, { running: true });
         assert.equal(party.state.round.progress.get('host')?.values.get('running'), 1);
 
-        playStopTheClockRound(party, 'host');
-        party.clock.advance(COMPETITION.RESULT_DISPLAY_MS);
+        playStopTheClockTarget(party, 'host');
+        party.clock.advance(STOP_THE_CLOCK.SCORES_BREAK_MS);
         assert.equal(party.state.round.progress.size, 0);
     });
 

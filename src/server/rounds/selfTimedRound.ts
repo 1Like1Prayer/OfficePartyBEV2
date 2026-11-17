@@ -16,7 +16,7 @@
  */
 
 import { SELF_TIMED } from '../../shared/constants.js';
-import type { AttemptTiming, SharedWorld, SharedWorldView } from '../../shared/games/selfTimed.js';
+import type { AttemptTiming, RankedEntry, SharedWorld, SharedWorldView } from '../../shared/games/selfTimed.js';
 import type { RoundDataPayload, RoundPhase } from '../../shared/protocol.js';
 import type { AnySelfTimedModule } from '../games/registry.js';
 import { done, refuse, succeed, type Outcome } from '../platform/outcome.js';
@@ -37,13 +37,16 @@ const DEFAULT_TIMING: AttemptTiming = {
 };
 
 /** Phases in which a dropped player may come back into the attempt. */
-const REJOINABLE_PHASES: readonly RoundPhase[] = ['ready-check', 'starting', 'countdown', 'playing'];
+// Results too: between a game's stages, someone back from a blip goes on into the next stage.
+const REJOINABLE_PHASES: readonly RoundPhase[] = ['ready-check', 'starting', 'countdown', 'playing', 'results'];
 
 export class SelfTimedRound {
     private phase: RoundPhase = 'idle';
     private attempt = 0;
     private isTiebreak = false;
     private tiebreakersRun = 0;
+    /** How each finished stage of this scoring round ranked, for the next stages' round data. */
+    private readonly stageRankings: RankedEntry[][] = [];
     private timing: AttemptTiming = DEFAULT_TIMING;
     private roundData: unknown = null;
     private startAtMs: number | null = null;
@@ -278,7 +281,9 @@ export class SelfTimedRound {
             roundInGame: this.options.roundInGame,
             roundsPerGame: this.options.roundsPerGame,
             playerIds: this.roster.list(),
-            attempt
+            attempt,
+            isTiebreak,
+            earlierStages: this.stageRankings
         });
         this.timing =
             timingOverride ??
@@ -352,7 +357,8 @@ export class SelfTimedRound {
         this.events.onLifecycleChanged();
 
         const ranked = this.module.rank(this.roster.resultEntries(), this.roundData, this.sharedView());
-        const noShow = this.roster.pending();
+        // A game that scores across stages may rank someone who missed this one (`reported: false`); they are not also a no-show.
+        const noShow = this.roster.pending().filter((id) => !ranked.some((row) => row.playerId === id));
         const stage = this.module.nextStage?.(ranked, this.roundData) ?? null;
         const outcome = decideAttemptOutcome(ranked, stage, this.tiebreakersRun);
 
@@ -367,6 +373,7 @@ export class SelfTimedRound {
 
         if (outcome.kind === 'next-stage') {
             const { participants, pauseMs, timing } = outcome.stage;
+            this.stageRankings.push(ranked);
             this.queueAttempt(pauseMs, false, participants, timing);
         } else if (outcome.kind === 'tiebreak') {
             this.tiebreakersRun += 1;
@@ -381,8 +388,14 @@ export class SelfTimedRound {
         timing?: AttemptTiming
     ): void {
         const nextAttempt = this.attempt + 1;
+        // Only those still here when it starts: nobody is waited on who has left in the meantime.
         this.phaseTimer.set(delayMs, () =>
-            this.startAttempt(nextAttempt, isTiebreak, participants, timing)
+            this.startAttempt(
+                nextAttempt,
+                isTiebreak,
+                participants.filter((id) => this.roster.has(id)),
+                timing
+            )
         );
     }
 
