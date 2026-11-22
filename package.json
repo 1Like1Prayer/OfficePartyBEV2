@@ -2,7 +2,7 @@
   "private": true,
   "name": "officepartyv2",
   "version": "0.1.0",
-  "description": "Office party minigames: a Colyseus server for six self-timed games",
+  "description": "Office party minigames: a Colyseus server for the party competition and standalone games",
   "type": "module",
   "main": "build/index.js",
   "engines": {
@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test --test-timeout=30000 \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
     "loadtest": "tsx loadtest/partyRoom.ts --room party",
-    "bots": "tsx loadtest/partyBots.ts"
+    "bots": "tsx loadtest/partyBots.ts",
+    "bots:skribbl": "tsx loadtest/skribblBots.ts"
   },
   "author": "",
   "license": "UNLICENSED",

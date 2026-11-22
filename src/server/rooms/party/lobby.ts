@@ -10,9 +10,9 @@ import type { PlaylistMode, StartBlockedReason } from '../../../shared/protocol.
 import { buildCustomPlaylist, buildRandomPlaylist } from '../../competition/playlist.js';
 import { playableGameIds, roundsForGame } from '../../games/registry.js';
 import { refuse, succeed, type Outcome } from '../../platform/outcome.js';
-import type { Members } from './members.js';
+import type { Members } from '../../platform/members.js';
 import type { PartyContext } from './partyContext.js';
-import { replaceArray, replaceMap } from './schema/sync.js';
+import { replaceArray, replaceMap } from '../../platform/schema/sync.js';
 
 export class Lobby {
     private customPlaylist: GameId[] = [];

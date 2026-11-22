@@ -21,9 +21,11 @@ import type { Outcome } from '../../../platform/outcome.js';
 import type { Scheduler } from '../../../platform/scheduler.js';
 import type { Lobby } from '../lobby.js';
 import type { MatchFlow } from '../matchFlow.js';
-import type { Members } from '../members.js';
+import type { Members } from '../../../platform/members.js';
+import type { StandaloneLauncher } from '../standalone.js';
 import {
     kickPlayerRequest,
+    launchStandaloneRequest,
     progressMessage,
     roundActionRequest,
     setModeRequest,
@@ -42,6 +44,7 @@ interface PartyHandlerScope {
     readonly members: Members;
     readonly lobby: Lobby;
     readonly match: MatchFlow;
+    readonly standalone: StandaloneLauncher;
     kickPlayer(ownerId: string, targetId: string): Outcome;
 }
 
@@ -81,6 +84,10 @@ export const partyMessages = {
     [ClientRequest.ReturnToLobby](this: PartyHandlerScope, client: Client, _message: unknown, ctx: MessageContext) {
         return reply(ctx, this.match.backToLobby(client.sessionId));
     },
+
+    [ClientRequest.LaunchStandalone]: validate(launchStandaloneRequest, async function (this: PartyHandlerScope, client, message, ctx) {
+        return reply(ctx, await this.standalone.launch(client.sessionId, message.gameId));
+    }),
 
     [ClientRequest.KickPlayer]: validate(kickPlayerRequest, function (this: PartyHandlerScope, client, message, ctx) {
         return reply(ctx, this.kickPlayer(client.sessionId, message.playerId));

@@ -1,8 +1,17 @@
 # Office Party V2
 
-The Colyseus server for eight office-party minigames: Minefield, Cube Counter,
-Crusher Escalator, Stop the Clock, Type Racer Roulette, Log Dodge, Hex Drop
-and Mage Battle.
+The Colyseus server for Office Party. After choosing a name and avatar,
+players pick one of two sections:
+
+- **Mini games**: the party competition, eight minigames played in rounds
+  (Minefield, Cube Counter, Crusher Escalator, Stop the Clock, Type Racer
+  Roulette, Log Dodge, Hex Drop and Mage Battle). Room name `party`.
+- **Standalone games**: one game played on its own, in its own room. The
+  list is `STANDALONE_CATALOG` (`src/shared/standalone/catalog.ts`); the
+  first is **Skribbl**. Room name `skribbl`.
+
+Both kinds of room are joined the same way: create one, share its
+4-character code, others join by code.
 
 Six are **self-timed**: each browser plays the round on its own clock and
 reports what happened, and the server replays the reports to decide the
@@ -30,6 +39,7 @@ you're out. The last mage standing wins, or the highest score after 60 seconds.
 | `npm run build` | Compile to `build/` |
 | `npm run loadtest -- --roomId ABCD --numClients 11` | Bots join a room, sync clocks, press ready |
 | `npm run bots -- --room ABCD --count 11` | Bots join a room and play every game (see below) |
+| `npm run bots:skribbl -- --room ABCD --count 5` | Bots join a Skribbl room, draw and guess |
 
 ## File tree
 
@@ -41,8 +51,12 @@ src/
     constants.ts               Platform tunables (players, timings, clock sync)
     clockSync.ts               Client-side server-clock estimate
     games/                     One folder per game: rules as plain functions
+    standalone/                The standalone catalogue, and one folder per game
+      skribbl/                 Protocol, state types, guess matching, hints,
+                               scoring, the binary drawing format + canvas model
   server/
-    platform/                  Scheduler (room timeline + timers), identity, Outcome
+    platform/                  Scheduler (room timeline + timers), identity, Outcome,
+                               Members (shared by every room), PlayerState
     games/                     Registry of playable games; server-only dice secret
     competition/               Playlist building and the score table
     rounds/                    The self-timed round runner (framework-free)
@@ -53,6 +67,9 @@ src/
       roundSync.ts             Runner output -> schema state
       schema/                  Synced state (players, lobby, round, progress)
       messages/                Zod validators and the request handlers
+    rooms/skribbl/             The Skribbl room: thin adapter, lobby (settings),
+                               game (turns, word, guesses, drawing), schema, messages
+    standalone/skribbl/        Server-only: word list (edit words.ts), blocklist, word picker
 test/                          Runner, match flow and real-server tests (+ support/)
 loadtest/                      partyRoom.ts (@colyseus/loadtest), partyBots.ts (playing bots)
 ```
@@ -100,3 +117,38 @@ Ctrl+C stops them.
 - **Reconnect:** keep `room.reconnectionToken`. The SDK reconnects
   automatically for 30 s; after a reload use `client.reconnect(token)`. The
   state resyncs and the current round data is sent again.
+
+## Skribbl client contract
+
+Everything the party contract says about joining, protocol version, requests,
+clock sync and reconnecting holds here too, with `SKRIBBL_ROOM_NAME`. Names
+and types are in `src/shared/standalone/skribbl/protocol.ts`; the synced
+state's shape is `SkribblStateJson` (`state.ts`).
+
+- **Lobby:** the owner sets `rounds`, `drawTimeSec`, `wordChoices` and `hints`
+  (`SkribblRequest.UpdateSettings`, clamped to `SKRIBBL_SETTINGS`) and starts
+  once `state.canStart`. There is no ready check.
+- **A turn:** `state.turn` goes `choosing` -> `drawing` -> `reveal`, with
+  `endsAtMs` on the room timeline. Every player draws once per round.
+  - The drawer gets `WordChoices` privately and answers with `ChooseWord`
+    (one is picked for them after `CHOOSE_MS`).
+  - The word is **never** in state. The drawer, and each guesser once they
+    get it, receive it in a private `Word` message. Everyone else sees
+    `turn.wordPattern` (`_` per hidden letter), which gains letters as hints.
+  - `TurnEnded` reveals the word and the turn's points; `GameEnded` the podium.
+- **Chat and guesses:** send every line with `SkribblRequest.Say`. While
+  someone draws, a guesser's line is their guess: the reply's `verdict` is
+  `correct` (never shown to others), `close` (show "close!" to this player
+  only) or `sent`. The drawer and players who guessed share a `guessed`
+  channel, and are refused (`reveals_word`) if they type the word.
+- **Drawing:** the drawer batches its ops about 20 times a second into one
+  packet (`encodeDrawPacket`, with `turn.turnId`) and sends it with
+  `room.sendBytes(SkribblBytes.Draw, bytes)`. Others receive the same bytes
+  under `SkribblBytes.Draw`, and should replay them about 100 ms late, at the
+  drawn pace (`dtMs`). Draw on a fixed `CANVAS.WIDTH x CANVAS.HEIGHT` bitmap and
+  scale it, so a fill covers the same pixels everywhere. Keep a `CanvasModel`
+  to redraw after an undo. Match packets to a turn by `turnId`, not by phase.
+- **Joining mid-game:** newcomers play at once as guessers, and draw from the
+  next round. On joining or reconnecting mid-turn, a client receives
+  `SkribblBytes.Canvas` (the whole drawing, shown at once) and any private
+  message it missed. A drawer who drops gets `DRAWER_GRACE_MS` to come back.

@@ -6,7 +6,7 @@
 import type { RoundPosition } from '../../competition/competition.js';
 import type { RoundDescription } from '../../rounds/roundTypes.js';
 import { ProgressState, type RoundState } from './schema/RoundState.js';
-import { replaceArray, replaceMap } from './schema/sync.js';
+import { replaceArray, replaceMap } from '../../platform/schema/sync.js';
 
 /** Which game of the playlist this is, and which of its rounds. */
 export const writeRoundPosition = (round: RoundState, position: RoundPosition): void => {

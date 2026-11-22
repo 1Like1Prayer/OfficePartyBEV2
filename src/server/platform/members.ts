@@ -1,5 +1,7 @@
 /**
- * Who is in the room, and who owns it.
+ * Who is in a room, and who owns it. Shared by every room type (the party
+ * room and the standalone games), which each keep `players`, `ownerId` and
+ * `phase` on their own synced state.
  *
  * - The room's creator owns it. Owner is a permissions role (pick games,
  *   press start, skip results); the owner doesn't run anything.
@@ -8,14 +10,32 @@
  *   dropped (a page refresh, a blip in the wifi) and comes back while their
  *   slot is held, they are given the room back.
  * - The owner may remove (kick) anyone else, in any phase.
- * - Joining during the lobby is free; once a competition is running,
- *   newcomers watch until the room is back in the lobby.
+ * - Joining during the lobby is free. Once a game is running, newcomers
+ *   watch until the room is back in the lobby, unless the room lets them play
+ *   straight away (`lateJoinersWatch: false`).
  */
 
-import { done, refuse, succeed, type Outcome } from '../../platform/outcome.js';
-import { sanitizeAvatar, sanitizeName } from '../../platform/identity.js';
-import type { PartyContext } from './partyContext.js';
+import type { MapSchema } from '@colyseus/schema';
+import { done, refuse, succeed, type Outcome } from './outcome.js';
+import { sanitizeAvatar, sanitizeName } from './identity.js';
 import { PlayerState } from './schema/PlayerState.js';
+
+/** The part of a room's synced state that membership owns. */
+export interface MembersState {
+    players: MapSchema<PlayerState>;
+    ownerId: string;
+    /** The room's phase; 'lobby' is the only one newcomers join as players by default. */
+    phase: string;
+}
+
+export interface MembersContext {
+    readonly state: MembersState;
+}
+
+export interface MembersOptions {
+    /** Newcomers who join mid-game watch until the lobby. Default true. */
+    lateJoinersWatch?: boolean;
+}
 
 export interface JoinProfile {
     name?: unknown;
@@ -27,7 +47,14 @@ export class Members {
     /** Who opened the room, while they still hold a slot in it. */
     private creatorId: string | null = null;
 
-    constructor(private readonly ctx: PartyContext) {}
+    private readonly lateJoinersWatch: boolean;
+
+    constructor(
+        private readonly ctx: MembersContext,
+        options: MembersOptions = {}
+    ) {
+        this.lateJoinersWatch = options.lateJoinersWatch ?? true;
+    }
 
     get(playerId: string): PlayerState | undefined {
         return this.ctx.state.players.get(playerId);
@@ -53,7 +80,7 @@ export class Members {
             name: sanitizeName(profile.name, `Player ${players.size + 1}`),
             // The id is a fine fallback seed: stable, and unique per player.
             avatar: sanitizeAvatar(profile.avatar, playerId),
-            isSpectator: this.ctx.state.phase !== 'lobby',
+            isSpectator: this.lateJoinersWatch && this.ctx.state.phase !== 'lobby',
             joinOrder: ++this.joinCounter
         });
         players.set(playerId, player);
@@ -103,6 +130,21 @@ export class Members {
         if (targetId === ownerId) return refuse('invalid_target', 'You cannot remove yourself.');
         if (!this.get(targetId)) return refuse('invalid_target', 'That player is not in the room.');
         return done;
+    }
+
+    /**
+     * Treat this player as the one who opened the room: they own it now, and
+     * get it back after a dropped connection. A standalone game opened from
+     * a party belongs to the party's owner, whoever's browser joins it first.
+     */
+    makeCreator(playerId: string): void {
+        const player = this.get(playerId);
+        if (!player) return;
+        this.creatorId = playerId;
+        if (this.isOwner(playerId) || !player.connected) return;
+        const previous = this.get(this.ctx.state.ownerId);
+        if (previous) previous.isOwner = false;
+        this.claimOwnership(playerId);
     }
 
     /** Back in the lobby: spectators play again and everyone re-confirms. */

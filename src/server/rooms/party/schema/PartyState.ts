@@ -7,8 +7,18 @@
 import { schema, t, type SchemaType } from '@colyseus/schema';
 import { ROOM } from '../../../../shared/constants.js';
 import { LobbyState } from './LobbyState.js';
-import { PlayerState } from './PlayerState.js';
+import { PlayerState } from '../../../platform/schema/PlayerState.js';
 import { RoundState } from './RoundState.js';
+
+/** A standalone game opened for the room; both '' when none is. */
+export const StandaloneLinkState = schema(
+    {
+        gameId: t.string().default(''),
+        roomCode: t.string().default('')
+    },
+    'StandaloneLinkState'
+);
+export type StandaloneLinkState = SchemaType<typeof StandaloneLinkState>;
 
 export const PartyState = schema(
     {
@@ -24,7 +34,8 @@ export const PartyState = schema(
         totalRounds: t.uint16().default(0),
         round: t.ref(RoundState),
         minPlayers: t.uint8().default(ROOM.MIN_PLAYERS),
-        maxPlayers: t.uint8().default(ROOM.MAX_PLAYERS)
+        maxPlayers: t.uint8().default(ROOM.MAX_PLAYERS),
+        standalone: t.ref(StandaloneLinkState)
     },
     'PartyState'
 );
