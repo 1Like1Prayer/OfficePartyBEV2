@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { AVATAR, ROOM } from '../../../../shared/constants.js';
 import { GAME_IDS } from '../../../../shared/games/catalog.js';
+import { STANDALONE_GAME_IDS } from '../../../../shared/standalone/catalog.js';
 
 /** Generous: names are trimmed and cut by `sanitizeName`; this only refuses absurd payloads. */
 const nameField = z.string().max(ROOM.MAX_NAME_LENGTH * 4);
@@ -22,7 +23,9 @@ const avatarField = z.string().max(AVATAR.MAX_PAYLOAD_LENGTH);
 export const joinOptions = z.object({
     protocolVersion: z.number(),
     name: nameField.optional(),
-    avatar: avatarField.optional()
+    avatar: avatarField.optional(),
+    /** Standalone rooms only; see JoinOptions. */
+    ownerToken: z.string().max(64).optional()
 });
 
 export const setNameRequest = z.object({ name: nameField });
@@ -34,6 +37,8 @@ export const setModeRequest = z.object({
 });
 
 export const setReadyRequest = z.object({ ready: z.boolean() });
+
+export const launchStandaloneRequest = z.object({ gameId: z.enum(STANDALONE_GAME_IDS) });
 
 export const kickPlayerRequest = z.object({ playerId: z.string().min(1).max(64) });
 

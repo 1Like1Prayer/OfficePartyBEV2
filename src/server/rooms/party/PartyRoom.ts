@@ -20,7 +20,9 @@ import type { Outcome } from '../../platform/outcome.js';
 import { createRoomScheduler, createRoomTimeline, type Scheduler } from '../../platform/scheduler.js';
 import { Lobby } from './lobby.js';
 import { MatchFlow } from './matchFlow.js';
-import { Members } from './members.js';
+import { Members } from '../../platform/members.js';
+import { standaloneClosedTopic } from '../../platform/standaloneLink.js';
+import { StandaloneLauncher } from './standalone.js';
 import { partyMessages } from './messages/partyMessages.js';
 import { joinOptions } from './messages/validators.js';
 import type { PartyContext } from './partyContext.js';
@@ -49,6 +51,14 @@ export class PartyRoom extends Room<{ state: PartyState }> {
     readonly members = new Members(this.context);
     readonly lobby = new Lobby(this.context, this.members);
     readonly match = new MatchFlow(this.context, this.members, this.lobby);
+    readonly standalone = new StandaloneLauncher(this.context, this.members, {
+        create: async (roomName, options) => (await matchMaker.createRoom(roomName, options)).roomId,
+        exists: async (roomCode) => (await matchMaker.query({ roomId: roomCode })).length > 0
+    });
+
+    private readonly onStandaloneClosed = (roomCode: unknown): void => {
+        if (typeof roomCode === 'string') this.standalone.onClosed(roomCode);
+    };
 
     /** Dropped players' held slots, so a kick can cancel the wait. */
     private readonly pendingReconnections = new Map<string, Deferred<Client>>();
@@ -64,6 +74,7 @@ export class PartyRoom extends Room<{ state: PartyState }> {
         // Rooms are joined by code only, never listed or matched at random.
         await this.setPrivate(true);
         this.lobby.publishCatalogue();
+        await matchMaker.presence.subscribe(standaloneClosedTopic(this.roomId), this.onStandaloneClosed);
     }
 
     /**
@@ -137,5 +148,6 @@ export class PartyRoom extends Room<{ state: PartyState }> {
 
     override onDispose(): void {
         this.match.dispose();
+        void matchMaker.presence.unsubscribe(standaloneClosedTopic(this.roomId), this.onStandaloneClosed);
     }
 }

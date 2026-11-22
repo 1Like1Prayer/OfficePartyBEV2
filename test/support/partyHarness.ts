@@ -6,7 +6,7 @@
 
 import { Lobby } from '../../src/server/rooms/party/lobby.js';
 import { MatchFlow } from '../../src/server/rooms/party/matchFlow.js';
-import { Members } from '../../src/server/rooms/party/members.js';
+import { Members } from '../../src/server/platform/members.js';
 import type { PartyContext } from '../../src/server/rooms/party/partyContext.js';
 import { PartyState } from '../../src/server/rooms/party/schema/PartyState.js';
 import { FakeScheduler } from './fakeScheduler.js';

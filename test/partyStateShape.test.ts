@@ -16,14 +16,15 @@ import type {
     RoundStateJson
 } from '../src/shared/partyState.js';
 import { PartyState } from '../src/server/rooms/party/schema/PartyState.js';
-import { PlayerState } from '../src/server/rooms/party/schema/PlayerState.js';
+import { PlayerState } from '../src/server/platform/schema/PlayerState.js';
 import { ProgressState } from '../src/server/rooms/party/schema/RoundState.js';
 
 type KeyList<T> = Record<keyof T, true>;
 
 const PARTY_KEYS: KeyList<PartyStateJson> = {
     roomCode: true, phase: true, ownerId: true, players: true, lobby: true,
-    playlist: true, totalRounds: true, round: true, minPlayers: true, maxPlayers: true
+    playlist: true, totalRounds: true, round: true, minPlayers: true, maxPlayers: true,
+    standalone: true
 };
 const PLAYER_KEYS: KeyList<PlayerStateJson> = {
     id: true, name: true, avatar: true, connected: true, isOwner: true,
@@ -61,5 +62,6 @@ describe('synced state shape', () => {
         assert.deepEqual(sortedKeys(json.lobby), sortedKeys(LOBBY_KEYS));
         assert.deepEqual(sortedKeys(json.round), sortedKeys(ROUND_KEYS));
         assert.deepEqual(json.round.progress, { p: { values: { x: 1 } } });
+        assert.deepEqual(json.standalone, { gameId: '', roomCode: '' });
     });
 });

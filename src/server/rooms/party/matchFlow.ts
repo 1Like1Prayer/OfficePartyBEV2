@@ -22,7 +22,7 @@ import { TimerSlot } from '../../platform/scheduler.js';
 import type { AttemptResolved } from '../../rounds/roundTypes.js';
 import { SelfTimedRound } from '../../rounds/selfTimedRound.js';
 import type { Lobby } from './lobby.js';
-import type { Members } from './members.js';
+import type { Members } from '../../platform/members.js';
 import type { PartyContext } from './partyContext.js';
 import {
     clearProgress,
@@ -33,7 +33,7 @@ import {
     writeRoundPosition,
     writeShared
 } from './roundSync.js';
-import { replaceArray } from './schema/sync.js';
+import { replaceArray } from '../../platform/schema/sync.js';
 
 export class MatchFlow {
     private competition: Competition | null = null;
